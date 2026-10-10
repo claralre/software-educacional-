@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -6,6 +5,24 @@
     <title>Software Educacional</title>
 </head>
 <body>
-    <h1>Hello, World!</h1>
+    <h1 id="mensagem">Carregando...</h1>
+
+    <script>
+        fetch("/api/")
+            .then(resposta => {
+                if (!resposta.ok) {
+                    throw new Error("Erro na resposta");
+                }
+                return resposta.json();
+            })
+            .then(dados => {
+                document.getElementById("mensagem").textContent =
+                    dados.mensagem;
+            })
+            .catch(() => {
+                document.getElementById("mensagem").textContent =
+                    "Erro ao conectar com o backend.";
+            });
+    </script>
 </body>
 </html>
