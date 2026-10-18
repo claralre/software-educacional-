@@ -64,3 +64,41 @@ não simulam interações reais no navegador.
 A análise léxica, sintática e semântica ainda
 não foi implementada, conforme o escopo
 da segunda etapa.
+
+
+## Testes automatizados de interação — Playwright
+
+Foi utilizado o Playwright com Python e Chromium para
+verificar o funcionamento da interface web.
+
+### Cenários testados
+
+1. Abertura da página do Software Educacional.
+2. Verificação do título da aplicação.
+3. Seleção de um exemplo de código Python.
+4. Preenchimento automático do campo de código.
+5. Edição manual do código-fonte.
+6. Envio do código para análise.
+7. Exibição da mensagem de sucesso retornada pelo backend.
+8. Validação da mensagem de erro para código vazio.
+
+### Ambiente de execução
+
+- Sistema operacional: macOS.
+- Linguagem dos testes: Python.
+- Ferramenta: Playwright com Chromium.
+- Aplicação executada com Docker Compose.
+- Endereço da interface: http://localhost:3000.
+
+### Comando utilizado
+
+python tests/test_interface.py
+
+### Resultado
+
+Todos os cenários de interação executados foram aprovados.
+
+Mensagem apresentada no terminal:
+
+Testes de interação aprovados!
+
