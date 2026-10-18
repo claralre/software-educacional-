@@ -7,7 +7,7 @@ def testar_interface():
         navegador = playwright.chromium.launch(headless=True)
         pagina = navegador.new_page()
 
-        pagina.goto("http://frontend", wait_until="domcontentloaded")
+       pagina.goto("http://localhost:3000", wait_until="domcontentloaded")
 
         # Verifica o título da aplicação
         assert pagina.locator("h1").inner_text() == "Software Educacional"
