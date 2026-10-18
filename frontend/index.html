@@ -1,28 +1,139 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Software Educacional</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Software Educacional - Python</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 30px;
+        }
+
+        main {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+        }
+
+        h1 {
+            color: #263b60;
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            height: 200px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 15px;
+        }
+
+        select, button {
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 15px;
+        }
+
+        button {
+            background: #263b60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #resultado {
+            background: #eef2f7;
+            padding: 15px;
+            min-height: 50px;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
+
 <body>
-    <h1 id="mensagem">Carregando...</h1>
+    <main>
+        <h1>Software Educacional</h1>
+        <p>Introdução à análise de código Python</p>
+
+        <h2>Exemplos de programas</h2>
+
+        <select id="exemplos">
+            <option value="">Selecione um exemplo</option>
+            <option value="variavel">Variável</option>
+            <option value="soma">Operação aritmética</option>
+            <option value="multiplicacao">Multiplicação</option>
+        </select>
+
+        <h2>Digite seu código Python</h2>
+
+        <textarea id="codigo"
+          placeholder="Digite ou cole seu código aqui..."></textarea>
+
+        <button id="analisar">Analisar código</button>
+
+        <h2>Resultado</h2>
+        <div id="resultado" role="status">
+            Aguardando código...
+        </div>
+    </main>
 
     <script>
-        fetch("/api/")
-            .then(resposta => {
-                if (!resposta.ok) {
-                    throw new Error("Erro na resposta");
+        const exemplos = {
+            variavel: "idade = 21",
+            soma: "resultado = 10 + 5",
+            multiplicacao: "total = 4 * 3"
+        };
+
+        const campoCodigo = document.getElementById("codigo");
+        const seletor = document.getElementById("exemplos");
+        const resultado = document.getElementById("resultado");
+
+        seletor.addEventListener("change", function () {
+            if (exemplos[seletor.value]) {
+                campoCodigo.value = exemplos[seletor.value];
+            }
+            resultado.textContent = "Aguardando código...";
+        });
+
+        document.getElementById("analisar").addEventListener(
+            "click", async function () {
+                const codigo = campoCodigo.value;
+
+                if (!codigo.trim()) {
+                    resultado.textContent =
+                        "Informe um código-fonte antes de solicitar a análise.";
+                    return;
                 }
-                return resposta.json();
-            })
-            .then(dados => {
-                document.getElementById("mensagem").textContent =
-                    dados.mensagem;
-            })
-            .catch(() => {
-                document.getElementById("mensagem").textContent =
-                    "Erro ao conectar com o backend.";
-            });
+
+                resultado.textContent = "Enviando código...";
+
+                try {
+                    const resposta = await fetch("/api/analisar", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ codigo: codigo })
+                    });
+
+                    const dados = await resposta.json();
+
+                    resultado.textContent =
+                        dados.mensagem || "Erro ao processar a resposta.";
+                } catch (erro) {
+                    resultado.textContent =
+                        "Não foi possível comunicar com o servidor.";
+                }
+            }
+        );
     </script>
 </body>
 </html>
