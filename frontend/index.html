@@ -1,67 +1,46 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#263b60">
     <title>Software Educacional - Python</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f6f9;
-            margin: 0;
-            padding: 30px;
-        }
-
-        main {
-            max-width: 800px;
-            margin: auto;
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-        }
-
-        h1 {
-            color: #263b60;
-        }
-
-        textarea {
-            width: 100%;
-            box-sizing: border-box;
-            height: 200px;
-            padding: 12px;
-            font-family: monospace;
-            font-size: 15px;
-        }
-
-        select, button {
-            padding: 12px;
-            margin: 10px 0;
-            font-size: 15px;
-        }
-
-        button {
-            background: #263b60;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        #resultado {
-            background: #eef2f7;
-            padding: 15px;
-            min-height: 50px;
-            white-space: pre-wrap;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <main>
-        <h1>Software Educacional</h1>
-        <p>Introdução à análise de código Python</p>
+        <header>
+            <h1>Software Educacional</h1>
+            <p>Introdução à análise de código Python — Etapa 3: análise léxica (scanner)</p>
+        </header>
+
+        <details class="cartao" id="tutorial">
+            <summary>Primeiros passos (tutorial)</summary>
+            <ol>
+                <li>Escolha um <strong>exemplo</strong> ou digite seu próprio código Python.</li>
+                <li>Clique em <strong>Analisar código</strong>. O código é enviado ao scanner no servidor.</li>
+                <li>Veja o código <strong>colorido por categoria</strong> e toque em um token para ver detalhes.</li>
+                <li>Use o <strong>Passo a passo</strong> para ver o scanner percorrendo o código, um token por vez.</li>
+                <li>Consulte a <strong>tabela de tokens</strong>, a <strong>sequência de tokens</strong> e o <strong>resumo</strong> por categoria.</li>
+                <li>Experimente o exemplo <em>Erros léxicos</em> para ver como o scanner reporta problemas sem parar a análise.</li>
+            </ol>
+        </details>
+
+        <details class="cartao" id="conceitos">
+            <summary>O que é um token? E um lexema?</summary>
+            <p>O <strong>analisador léxico</strong> (ou <em>scanner</em>) é a primeira fase de um compilador.
+               Ele lê o código caractere a caractere e agrupa os caracteres em pedaços com significado.</p>
+            <ul>
+                <li><strong>Lexema</strong>: o trecho exato de texto encontrado no código, por exemplo <code>idade</code>, <code>=</code> ou <code>21</code>.</li>
+                <li><strong>Token</strong>: o par <em>(categoria, lexema)</em>, por exemplo <code>&lt;IDENTIFICADOR, idade&gt;</code>. É o que as próximas fases recebem.</li>
+                <li><strong>Padrão</strong>: a regra que descreve os lexemas de uma categoria, por exemplo
+                    “letra ou _ seguida de letras, dígitos ou _” para identificadores.</li>
+            </ul>
+            <p>Espaços e comentários são descartados. Em Python, porém, a <strong>indentação</strong> importa:
+               por isso o scanner gera os tokens <code>INDENTA</code> e <code>DEDENTA</code>, que marcam o início e o fim de blocos.</p>
+            <p>O scanner <strong>não</strong> verifica se os tokens estão na ordem correta — isso é tarefa da análise sintática (próxima etapa).</p>
+        </details>
 
         <h2>Exemplos de programas</h2>
 
@@ -70,70 +49,106 @@
             <option value="variavel">Variável</option>
             <option value="soma">Operação aritmética</option>
             <option value="multiplicacao">Multiplicação</option>
+            <option value="condicional">Condicional (if/else)</option>
+            <option value="laco">Laço while</option>
+            <option value="funcao">Função com comentários</option>
+            <option value="literais">Literais (inteiros, reais, strings)</option>
+            <option value="operadores">Operadores compostos</option>
+            <option value="erros">Erros léxicos</option>
         </select>
 
         <h2>Digite seu código Python</h2>
 
-        <textarea id="codigo"
+        <textarea id="codigo" spellcheck="false" autocapitalize="off" autocomplete="off"
           placeholder="Digite ou cole seu código aqui..."></textarea>
 
-        <button id="analisar">Analisar código</button>
+        <button id="analisar" class="principal">Analisar código</button>
 
         <h2>Resultado</h2>
         <div id="resultado" role="status">
             Aguardando código...
         </div>
+
+        <section id="painel" hidden>
+            <nav class="abas" role="tablist" aria-label="Visualizações da análise léxica">
+                <button role="tab" data-aba="destaque" aria-selected="true">Código colorido</button>
+                <button role="tab" data-aba="passo">Passo a passo</button>
+                <button role="tab" data-aba="tabela">Tabela de tokens</button>
+                <button role="tab" data-aba="sequencia">Sequência</button>
+                <button role="tab" data-aba="resumo">Resumo</button>
+            </nav>
+
+            <div class="aba" id="aba-destaque" role="tabpanel">
+                <p class="ajuda">Cada cor representa uma categoria. Toque em um trecho para ver o token correspondente.</p>
+                <div id="legenda" class="legenda"></div>
+                <pre id="codigo-destacado" class="codigo"></pre>
+                <div id="detalhe-token" class="detalhe" aria-live="polite">Nenhum token selecionado.</div>
+            </div>
+
+            <div class="aba" id="aba-passo" role="tabpanel" hidden>
+                <p class="ajuda">Veja o scanner percorrer o código da esquerda para a direita, de cima para baixo,
+                   reconhecendo um token por vez.</p>
+                <div class="controles">
+                    <button id="passo-inicio" title="Voltar ao início" aria-label="Voltar ao início">⏮</button>
+                    <button id="passo-anterior" title="Passo anterior" aria-label="Passo anterior">◀</button>
+                    <button id="passo-play" title="Reproduzir" aria-label="Reproduzir">▶ Reproduzir</button>
+                    <button id="passo-proximo" title="Próximo passo" aria-label="Próximo passo">▶|</button>
+                    <button id="passo-fim" title="Ir ao fim" aria-label="Ir ao fim">⏭</button>
+                    <label class="velocidade">Velocidade
+                        <input id="passo-velocidade" type="range" min="1" max="5" value="3">
+                    </label>
+                </div>
+                <div id="passo-contador" class="contador">Passo 0 de 0</div>
+                <pre id="passo-codigo" class="codigo"></pre>
+                <div id="passo-explicacao" class="detalhe" aria-live="polite"></div>
+                <div class="rolavel">
+                    <table id="passo-tabela">
+                        <thead><tr><th>#</th><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="aba" id="aba-tabela" role="tabpanel" hidden>
+                <div class="filtros">
+                    <label>Categoria
+                        <select id="filtro-tipo"><option value="">Todas</option></select>
+                    </label>
+                    <label class="marcar">
+                        <input type="checkbox" id="mostrar-estruturais" checked>
+                        Mostrar tokens de estrutura (NOVA_LINHA, INDENTA, DEDENTA, FIM)
+                    </label>
+                </div>
+                <div class="rolavel">
+                    <table id="tabela-tokens">
+                        <thead>
+                            <tr><th>#</th><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th><th>Descrição</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="aba" id="aba-sequencia" role="tabpanel" hidden>
+                <p class="ajuda">À esquerda, o código como você escreveu. À direita, o que o analisador sintático receberá:
+                   apenas a sequência de tokens <code>&lt;TIPO, lexema&gt;</code>.</p>
+                <div id="comparacao" class="comparacao"></div>
+            </div>
+
+            <div class="aba" id="aba-resumo" role="tabpanel" hidden>
+                <div id="resumo"></div>
+            </div>
+
+            <h2>Erros léxicos</h2>
+            <div id="erros" aria-live="polite"></div>
+        </section>
+
+        <details class="cartao" id="escopo">
+            <summary>Escopo léxico suportado</summary>
+            <div id="escopo-conteudo">Carregando...</div>
+        </details>
     </main>
 
-    <script>
-        const exemplos = {
-            variavel: "idade = 21",
-            soma: "resultado = 10 + 5",
-            multiplicacao: "total = 4 * 3"
-        };
-
-        const campoCodigo = document.getElementById("codigo");
-        const seletor = document.getElementById("exemplos");
-        const resultado = document.getElementById("resultado");
-
-        seletor.addEventListener("change", function () {
-            if (exemplos[seletor.value]) {
-                campoCodigo.value = exemplos[seletor.value];
-            }
-            resultado.textContent = "Aguardando código...";
-        });
-
-        document.getElementById("analisar").addEventListener(
-            "click", async function () {
-                const codigo = campoCodigo.value;
-
-                if (!codigo.trim()) {
-                    resultado.textContent =
-                        "Informe um código-fonte antes de solicitar a análise.";
-                    return;
-                }
-
-                resultado.textContent = "Enviando código...";
-
-                try {
-                    const resposta = await fetch("/api/analisar", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ codigo: codigo })
-                    });
-
-                    const dados = await resposta.json();
-
-                    resultado.textContent =
-                        dados.mensagem || "Erro ao processar a resposta.";
-                } catch (erro) {
-                    resultado.textContent =
-                        "Não foi possível comunicar com o servidor.";
-                }
-            }
-        );
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
