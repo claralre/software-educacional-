@@ -4,100 +4,120 @@
 
 Este projeto tem como objetivo desenvolver uma aplicação web educacional para auxiliar estudantes na compreensão dos processos de análise léxica, sintática e semântica de códigos escritos em Python.
 
-O desenvolvimento é incremental. A primeira etapa contemplou a configuração do ambiente, a estrutura da aplicação e a comunicação entre frontend e backend.
+O desenvolvimento é incremental:
 
-A segunda etapa contempla a implementação da interface web para entrada de código-fonte, seleção de exemplos, envio de requisições ao backend e apresentação de mensagens de retorno.
+- **Etapa 1** — configuração do ambiente, estrutura da aplicação e comunicação entre frontend e backend;
+- **Etapa 2** — interface web para entrada de código, seleção de exemplos, envio ao backend e mensagens de retorno;
+- **Etapa 3 (atual)** — **análise léxica (scanner)**: o código é transformado em uma sequência de tokens, exibidos de forma didática, com erros léxicos explicados.
 
-**Nesta etapa, o sistema ainda não realiza análises léxica, sintática ou semântica.** Essas funcionalidades serão implementadas nas próximas etapas.
+**A análise sintática (Etapa 4) e a análise semântica (Etapa 5) ainda não foram implementadas.** Nesta etapa, o sistema reconhece os tokens, mas não verifica se estão na ordem correta: `= = if 10 )` é tokenizado sem erros.
 
 ## 2. Linguagem escolhida
 
 A linguagem selecionada é **Python**, devido à sua legibilidade, sintaxe relativamente simples e ampla utilização no ensino de programação.
 
-### Subconjunto inicial
+Um aspecto pouco explorado por ferramentas didáticas de compiladores (que costumam usar subconjuntos de C ou Pascal) é que, em Python, **a indentação faz parte da linguagem**. Por isso o scanner deste projeto gera os tokens `INDENTA` e `DEDENTA`, mostrando ao estudante como os blocos são reconhecidos já na análise léxica.
 
-O projeto abordará inicialmente:
+## 3. Escopo léxico (subconjunto suportado)
 
-- Declaração e atribuição de variáveis;
-- Identificadores e valores numéricos;
-- Operadores aritméticos (`+`, `-`, `*`, `/`);
-- Expressões aritméticas simples.
+| Categoria            | Exemplos                                                        |
+|----------------------|-----------------------------------------------------------------|
+| Palavras reservadas  | `if`, `elif`, `else`, `while`, `for`, `in`, `def`, `return`, `and`, `or`, `not`, `True`, `False`, `None` (todas as 35 do Python 3) |
+| Identificadores      | `numero`, `resultado`, `_x1`, `média` — letra ou `_`, seguida de letras, dígitos ou `_` |
+| Literais inteiros    | `0`, `10`, `42`, `1_000`                                         |
+| Literais reais       | `3.14`, `.5`, `1e10`, `1.5e-3`                                   |
+| Literais string      | `"texto"`, `'A'`, `"""várias linhas"""`, `f"x={x}"`               |
+| Operadores           | aritméticos `+ - * / // % **`; relacionais `== != < > <= >=`; atribuição `= += -= *= /= //= %= **=`; lógicos `and or not` (palavras reservadas) |
+| Delimitadores        | `(` `)` `[` `]` `{` `}` `,` `:` `.` `;`                          |
+| Comentários          | `# até o fim da linha` — ignorados (não geram tokens)            |
+| Espaços em branco    | ignorados entre tokens; no início da linha geram `INDENTA`/`DEDENTA` |
+| Estrutura            | `NOVA_LINHA` (fim de instrução), `INDENTA`, `DEDENTA`, `FIM`     |
+| Não reconhecidos     | `@`, `$`, `?`, `!` isolado, `&`, `\|`, `^`, `~`, `` ` `` → erro léxico com linha, coluna e dica; o scanner continua a análise |
 
-## 3. Tecnologias utilizadas
+A especificação completa (regras de formação, todos os erros tratados e o algoritmo) está em [`docs/ESCOPO_LEXICO.md`](docs/ESCOPO_LEXICO.md). A interface também mostra esse escopo na seção **Escopo léxico suportado**, carregada do próprio backend.
 
-- **Frontend:** HTML e JavaScript;
+## 4. O scanner
+
+O scanner ([`backend/scanner.py`](backend/scanner.py)) foi **escrito à mão em Python**, sem geradores de analisadores e sem o módulo `tokenize` da biblioteca padrão. Ele percorre o código caractere a caractere; o caractere atual decide qual reconhecedor é usado (identificador, número, string, operador, delimitador, comentário), aplicando a regra do **casamento mais longo** (`**=` é um único token).
+
+Justificativa da escolha:
+
+- cada regra fica em uma função curta, que pode ser lida pelo estudante;
+- permite mensagens de erro em português com dicas e **continua após erros**, acumulando todos;
+- cada token recebe uma `explicacao` de por que foi classificado assim, usada no modo passo a passo;
+- não adiciona dependências e roda no mesmo backend Flask.
+
+## 5. Tecnologias utilizadas
+
+- **Frontend:** HTML, CSS e JavaScript (sem frameworks);
 - **Backend:** Python com Flask;
+- **Scanner:** Python (biblioteca padrão);
 - **Servidor web:** Nginx;
 - **Conteinerização:** Docker;
 - **Orquestração:** Docker Compose;
-- **Testes do backend:** Python e unittest;
-- **Testes do frontend:** Node.js;
+- **Testes do backend e do scanner:** Python e unittest;
+- **Testes do frontend:** Node.js Test Runner;
 - **Testes de interação:** Playwright com Chromium;
 - **Versionamento:** Git e GitHub.
 
-## 4. Estrutura do projeto
+## 6. Estrutura do projeto
 
 ```text
 software-educacional/
 ├── frontend/
-│   ├── index.html
+│   ├── index.html          # estrutura da interface
+│   ├── style.css           # estilos (inclui layout para celular)
+│   ├── app.js              # lógica da interface e visualizações
 │   ├── nginx.conf
 │   ├── Dockerfile
-│   └── test_interface.js
+│   └── test_interface.js   # testes Node.js
 ├── backend/
-│   ├── app.py
+│   ├── app.py              # API Flask
+│   ├── scanner.py          # analisador léxico
 │   ├── requirements.txt
 │   ├── Dockerfile
-│   └── test_app.py
+│   ├── test_app.py         # testes dos endpoints
+│   └── test_scanner.py     # testes unitários do scanner
 ├── tests/
-│   └── test_interface.py
+│   └── test_interface.py   # testes de interação (Playwright)
+├── scripts/
+│   └── testar_tudo.sh      # executa toda a bateria de testes
 ├── docs/
-│   └── RELATORIO_TESTES.md
+│   ├── ESCOPO_LEXICO.md    # especificação léxica e funcionamento do scanner
+│   ├── TUTORIAL.md         # tutorial para estudantes
+│   └── RELATORIO_TESTES.md # registro dos testes (Etapas 2 e 3)
 ├── compose.yaml
 └── README.md
 ```
 
-## 5. Funcionalidades implementadas
+## 7. Funcionalidades implementadas
 
-A segunda etapa disponibiliza uma interface web com:
+### Etapa 2 (mantidas)
 
-- Identificação do projeto e da linguagem Python;
-- Campo editável para inserção de código-fonte;
-- Seleção de três exemplos de código Python;
-- Preenchimento automático do campo ao selecionar um exemplo;
-- Botão para solicitar a análise;
-- Área para apresentar as mensagens de resposta;
-- Comunicação entre frontend e backend por meio de requisições HTTP e JSON;
-- Validação de código vazio;
-- Tratamento de falhas de comunicação na interface.
+- Campo editável para código-fonte e seleção de exemplos;
+- Botão de análise e área de resultado;
+- Comunicação frontend–backend por HTTP e JSON;
+- Validação de código vazio, campo ausente, tipo inválido e JSON malformado;
+- Tratamento de falhas de comunicação.
 
-### Exemplos disponíveis
+### Etapa 3 (novas)
 
-**Declaração de variável:**
+- **Scanner** para o subconjunto de Python, integrado ao endpoint `/analisar`;
+- **Código colorido** por categoria de token, com legenda; tocar em um trecho mostra tipo, lexema, linha, coluna e a explicação da classificação;
+- **Passo a passo animado**: o scanner percorre o código token a token (avançar, voltar, reproduzir, pausar, velocidade), destacando o lexema atual, o que já foi lido e o que ainda falta, com a tabela sendo preenchida progressivamente;
+- **Tabela de tokens** (tipo, lexema, linha, coluna, descrição), com filtro por categoria e opção de ocultar tokens de estrutura;
+- **Sequência de tokens**: comparação, linha a linha, entre o código original e a sequência `<TIPO, lexema>` que o parser receberá;
+- **Resumo**: contagem por categoria (gráfico de barras) e lista de identificadores distintos (prévia da tabela de símbolos);
+- **Erros léxicos** com mensagem, localização e dica; clicar em um erro o destaca no código;
+- Explicação de **token, lexema e padrão**, **tutorial** inicial e tabela do **escopo léxico**;
+- **Nove exemplos**: os três da Etapa 2 e mais condicional, laço, função com comentários, literais, operadores compostos e erros léxicos;
+- **Layout responsivo** para celular (abas roláveis, botões grandes para toque, sem rolagem horizontal).
 
-```python
-idade = 21
-```
+## 8. Comunicação entre frontend e backend (contrato)
 
-**Operação de soma:**
+A interface envia `POST /api/analisar`, encaminhado pelo Nginx ao Flask em `/analisar`.
 
-```python
-resultado = 10 + 5
-```
-
-**Operação de multiplicação:**
-
-```python
-total = 4 * 3
-```
-
-Os exemplos podem ser selecionados e modificados pelo usuário.
-
-## 6. Comunicação entre frontend e backend
-
-A interface envia uma requisição HTTP POST para o endpoint `/api/analisar`, encaminhado pelo Nginx ao backend Flask em `/analisar`.
-
-O corpo da requisição utiliza JSON:
+### Requisição
 
 ```json
 {
@@ -105,61 +125,132 @@ O corpo da requisição utiliza JSON:
 }
 ```
 
-Quando o código é válido para recebimento, o backend responde:
+### Resposta — análise concluída sem erros (HTTP 200)
 
 ```json
 {
-  "mensagem": "Código recebido com sucesso.",
-  "recebido": true
+  "sucesso": true,
+  "recebido": true,
+  "mensagem": "Análise léxica concluída: 5 token(s) reconhecido(s).",
+  "tokens": [
+    { "tipo": "IDENTIFICADOR", "lexema": "idade", "linha": 1, "coluna": 1,
+      "descricao": "nome definido pelo programador",
+      "explicacao": "'idade' começa com letra ou '_' e continua com letras, dígitos ou '_', e não é palavra reservada." },
+    { "tipo": "OPERADOR", "lexema": "=", "linha": 1, "coluna": 7, "descricao": "atribuição", "explicacao": "..." },
+    { "tipo": "LITERAL_INTEIRO", "lexema": "21", "linha": 1, "coluna": 9, "descricao": "número inteiro", "explicacao": "..." },
+    { "tipo": "NOVA_LINHA", "lexema": "", "linha": 1, "coluna": 11, "descricao": "fim de linha lógica", "explicacao": "..." },
+    { "tipo": "FIM", "lexema": "", "linha": 1, "coluna": 11, "descricao": "fim do código-fonte", "explicacao": "..." }
+  ],
+  "erros": [],
+  "comentarios": [],
+  "resumo": {
+    "total_tokens": 5,
+    "total_erros": 0,
+    "por_tipo": { "IDENTIFICADOR": 1, "OPERADOR": 1, "LITERAL_INTEIRO": 1, "NOVA_LINHA": 1, "FIM": 1 }
+  }
 }
 ```
 
-O sistema também verifica situações como:
+| Campo         | Descrição |
+|---------------|-----------|
+| `sucesso`     | `true` se não houve erro léxico; `false` caso contrário |
+| `recebido`    | mantido da Etapa 2: o código foi recebido e analisado |
+| `mensagem`    | resumo legível do resultado |
+| `tokens`      | lista de tokens: `tipo`, `lexema`, `linha`, `coluna` (a partir de 1), `descricao` e `explicacao` |
+| `erros`       | lista de erros léxicos, ordenada por posição |
+| `comentarios` | comentários descartados (`lexema`, `linha`, `coluna`), usados para o destaque |
+| `resumo`      | totais e contagem de tokens por tipo |
 
-- Código vazio ou contendo apenas espaços;
-- Campo `codigo` ausente;
-- Tipo de dado inválido;
-- JSON malformado.
+### Resposta — código com erro léxico (HTTP 200, `sucesso: false`)
 
-As requisições inválidas recebem respostas de erro, com código HTTP 400.
+Requisição `{"codigo": "x = 1\nresultado = @"}`:
 
-A resposta de sucesso confirma apenas o recebimento do código, não sua correção sintática ou semântica.
+```json
+{
+  "sucesso": false,
+  "recebido": true,
+  "mensagem": "Análise léxica concluída com 1 erro(s) léxico(s).",
+  "tokens": [ "... tokens válidos continuam sendo retornados ..." ],
+  "erros": [
+    {
+      "tipo": "ERRO_LEXICO",
+      "lexema": "@",
+      "linha": 2,
+      "coluna": 13,
+      "mensagem": "Erro léxico na linha 2, coluna 13: caractere não reconhecido '@'.",
+      "dica": "Decoradores e o operador '@' não fazem parte do subconjunto suportado."
+    }
+  ],
+  "comentarios": [],
+  "resumo": {
+    "total_tokens": 8,
+    "total_erros": 1,
+    "por_tipo": { "IDENTIFICADOR": 2, "OPERADOR": 2, "LITERAL_INTEIRO": 1, "NOVA_LINHA": 2, "FIM": 1 }
+  }
+}
+```
 
-## 7. Pré-requisitos
+Um erro léxico **não** é um erro da requisição: o código foi recebido e analisado com sucesso, e o resultado da análise indica problemas no código do estudante. Por isso a resposta usa HTTP 200 com `sucesso: false`.
+
+### Respostas de erro da requisição
+
+| Situação                                   | HTTP | `mensagem` |
+|--------------------------------------------|------|------------|
+| JSON malformado ou corpo que não é objeto  | 400  | Requisição inválida. |
+| Campo `codigo` ausente ou não-texto        | 400  | Informe um código-fonte válido. |
+| Código vazio ou só com espaços             | 400  | Informe um código-fonte antes de solicitar a análise. |
+| Código com mais de 20 000 caracteres       | 413  | O código é muito grande para ser analisado (...). |
+| Falha interna inesperada                   | 500  | Ocorreu um erro interno ao analisar o código. Tente novamente. |
+
+Essas respostas têm o formato `{"sucesso": false, "mensagem": "...", "tokens": [], "erros": []}`. Detalhes internos (stack traces) nunca são enviados ao usuário.
+
+### Endpoint do escopo léxico
+
+`GET /api/escopo` (Flask: `/escopo`) retorna as palavras reservadas, operadores, delimitadores e tipos de token suportados, usados pela interface.
+
+## 9. Pré-requisitos
 
 Para executar a aplicação:
 
 - Docker Desktop;
 - Docker Compose;
-- Navegador web.
+- Navegador web (computador ou celular).
 
 Para executar os testes automatizados adicionais:
 
-- Node.js, para os testes de estrutura do frontend;
+- Node.js, para os testes do frontend (ou a imagem `node:22-alpine`);
 - Python e Playwright, para os testes de interação;
 - Chromium instalado pelo Playwright.
 
-## 8. Como executar a aplicação
+Nenhuma variável de ambiente, porta ou credencial nova foi adicionada nesta etapa.
+
+## 10. Como executar a aplicação
 
 Clone o repositório ou baixe o arquivo ZIP no GitHub e descompacte-o.
 
-Abra o Terminal na pasta principal do projeto, onde está localizado o arquivo `compose.yaml`.
-
-Execute:
+Abra o Terminal na pasta principal do projeto, onde está localizado o arquivo `compose.yaml`, e execute:
 
 ```bash
 docker compose up -d --build
 ```
 
-Aguarde a inicialização dos serviços.
-
 Abra a interface no navegador:
 
 http://localhost:3000
 
-O backend também pode ser acessado em:
+O backend também pode ser acessado diretamente em:
 
 http://localhost:5001
+
+Para testar o scanner pela linha de comando:
+
+```bash
+curl -X POST http://localhost:3000/api/analisar \
+  -H "Content-Type: application/json" \
+  -d '{"codigo": "if x >= 10:\n    y = x * 2"}'
+```
+
+Para usar no celular, acesse `http://<IP-do-computador>:3000` estando na mesma rede.
 
 Para encerrar os serviços:
 
@@ -167,106 +258,91 @@ Para encerrar os serviços:
 docker compose down
 ```
 
-## 9. Testes realizados
+Um roteiro guiado para estudantes está em [`docs/TUTORIAL.md`](docs/TUTORIAL.md).
 
-O projeto utiliza testes desenvolvidos progressivamente para verificar o backend, a estrutura do frontend e a interação entre os componentes.
+## 11. Testes
 
-### 9.1. Testes do backend
+Toda a bateria (backend, frontend, comunicação e interação) pode ser executada com:
 
-Foram implementados **7 testes automatizados**, utilizando `unittest`.
+```bash
+sh scripts/testar_tudo.sh
+```
 
-Os cenários incluem:
+### 11.1. Testes unitários do scanner — 50 testes
 
-- Funcionamento da rota inicial;
-- Recebimento de código válido;
-- Código vazio;
-- Código contendo apenas espaços;
-- Ausência do campo `codigo`;
-- JSON malformado;
-- Tipo de dado inválido.
+Palavras reservadas, identificadores, literais, operadores (inclusive compostos), delimitadores, comentários, espaços, indentação, posição (linha/coluna), erros léxicos e casos de borda.
 
-Para executar:
+```bash
+docker compose run --rm --build backend python -m unittest -v test_scanner
+```
+
+**Resultado obtido: 50 testes aprovados.**
+
+### 11.2. Testes dos endpoints — 18 testes
+
+7 testes da Etapa 2 (regressão) e 11 novos: tokens na resposta, formato do contrato, erro léxico com `sucesso: false`, códigos HTTP (200, 400, 405, 413, 500) e endpoint `/escopo`.
 
 ```bash
 docker compose run --rm --build backend python -m unittest -v test_app
 ```
 
-**Resultado obtido: 7 testes aprovados.**
+**Resultado obtido: 18 testes aprovados.**
 
-### 9.2. Testes de estrutura do frontend
+### 11.3. Testes do frontend — 22 testes
 
-Foram implementados **8 testes automatizados** com Node.js, verificando elementos e trechos do código-fonte da interface.
-
-Para executar, a partir da pasta principal do projeto:
+8 testes da Etapa 2 (regressão) e 14 novos (estrutura da interface e funções de destaque, passo a passo, escape de HTML e contagem).
 
 ```bash
 docker run --rm -v "$PWD/frontend:/app" -w /app node:22-alpine node --test test_interface.js
 ```
 
-**Resultado obtido: 8 testes aprovados.**
+**Resultado obtido: 22 testes aprovados.**
 
-Esses testes verificam a estrutura do frontend, mas não substituem os testes de interação no navegador.
+### 11.4. Testes de interação (Playwright) — 8 cenários
 
-### 9.3. Testes automatizados de interação
-
-Foi utilizado o Playwright com Chromium para verificar o comportamento real da interface.
-
-Os cenários executados incluem:
-
-- Abertura da aplicação;
-- Verificação do título;
-- Seleção de exemplo;
-- Preenchimento automático do campo;
-- Edição manual do código;
-- Envio de requisição;
-- Exibição da mensagem de sucesso;
-- Validação de código vazio.
-
-Para instalar o Playwright em um ambiente Python:
+Regressão do fluxo da Etapa 2, tabela de tokens, código colorido, passo a passo, erros léxicos, entradas hostis (HTML/emoji/só espaços), escopo e uso em tela de celular.
 
 ```bash
 python -m pip install playwright
 python -m playwright install chromium
-```
-
-Com a aplicação em execução em `http://localhost:3000`, execute na pasta principal:
-
-```bash
 python tests/test_interface.py
 ```
 
-**Resultado obtido: testes de interação aprovados.**
+Variáveis opcionais: `URL_APLICACAO` (padrão `http://localhost:3000`) e `CAMINHO_CHROMIUM` (para usar um Chromium já instalado).
 
-### 9.4. Testes manuais
+**Resultado obtido: 8 cenários aprovados.**
 
-Também foram realizados testes manuais no navegador, incluindo:
+O registro detalhado (comandos, resultados, falhas encontradas e correções) está em [`docs/RELATORIO_TESTES.md`](docs/RELATORIO_TESTES.md).
 
-- Acesso à interface;
-- Seleção de exemplo de código;
-- Envio de código preenchido;
-- Exibição da resposta do backend;
-- Envio de campo vazio.
+## 12. Limitações conhecidas
 
-Os resultados estão documentados em `docs/RELATORIO_TESTES.md`.
+- O scanner **não verifica a estrutura** do programa (ordem dos tokens, parênteses sobrando): isso será feito pelo analisador sintático na Etapa 4.
+- Não há análise semântica (variáveis não definidas, tipos) — Etapa 5.
+- Não fazem parte do subconjunto: inteiros em outras bases (`0x1F`, `0b101`), números imaginários (`3j`), operadores bit a bit (`& | ^ ~ << >>`), `@`, `->` e `:=`.
+- O conteúdo de f-strings não é analisado: `f"{x}"` é um único `LITERAL_STRING`.
+- Colunas são contadas em caracteres; uma tabulação conta como 1 coluna.
+- A versão para celular foi validada por emulação no Playwright, não em um aparelho físico.
 
-## 10. Estado atual do projeto
+## 13. Estado atual do projeto
 
 **Primeira etapa — Concluída**
 
-- Estrutura inicial da aplicação;
-- Configuração do Docker e Docker Compose;
-- Comunicação básica entre frontend e backend.
+- Estrutura inicial, Docker e Docker Compose, comunicação básica frontend–backend.
 
-**Segunda etapa — Funcionalidades e testes implementados**
+**Segunda etapa — Concluída**
 
-- Interface para entrada de código Python;
-- Três exemplos disponíveis;
-- Envio de código para o backend;
-- Respostas em JSON;
-- Validação de entradas inválidas;
-- Testes automatizados e manuais;
-- Documentação dos testes.
+- Interface para entrada de código, exemplos, envio ao backend, validações, testes e documentação.
 
-## 11. Próximas etapas
+**Terceira etapa — Concluída**
 
-As próximas etapas contemplarão a implementação dos mecanismos de análise léxica, sintática e semântica, além
+- Scanner para o subconjunto de Python, integrado ao backend;
+- Contrato de comunicação com tokens e erros léxicos;
+- Visualizações didáticas (código colorido, passo a passo, tabela, sequência, resumo);
+- Erros léxicos com mensagens, localização e dicas;
+- 90 testes automatizados (68 no backend e 22 no frontend) + 8 cenários de interação;
+- Documentação do escopo léxico, tutorial e relatório de testes.
+
+## 14. Próximas etapas
+
+- **Etapa 4 — Análise sintática:** o parser consumirá a sequência de tokens produzida pelo scanner (incluindo `NOVA_LINHA`, `INDENTA`, `DEDENTA` e `FIM`) para verificar a estrutura do programa e construir a árvore sintática.
+- **Etapa 5 — Análise semântica:** verificação de significado, tabela de símbolos e tipos.
