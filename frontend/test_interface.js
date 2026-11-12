@@ -183,3 +183,193 @@ test("contarPorTipo agrupa tokens por categoria", () => {
         IDENTIFICADOR: 2, OPERADOR: 1, LITERAL_STRING: 1, NOVA_LINHA: 2, FIM: 1
     });
 });
+
+// -- Etapa 4: análise sintática ------------------------------------------------
+
+const arvore = require("./arvore.js");
+const ia = require("./ia.js");
+
+test("página carrega os scripts da análise sintática e da IA", () => {
+    assert.match(html, /<script src="arvore.js"><\/script>/);
+    assert.match(html, /<script src="ia.js"><\/script>/);
+    const dockerfile = fs.readFileSync("Dockerfile", "utf8");
+    for (const arquivo of ["index.html", "style.css", "app.js", "arvore.js", "ia.js"]) {
+        assert.match(dockerfile, new RegExp(arquivo.replace(".", "\\.")));
+    }
+});
+
+test("possui as seções da análise sintática", () => {
+    for (const id of ["painel-sintatico", "resultado-sintatico", "arvore-ast", "detalhe-no",
+        "erros-sintaticos", "construcao-arvore", "arvore-derivacao", "lista-gramatica",
+        "json-ast", "baixar-json", "expandir-ast", "recolher-ast", "filtro-no"]) {
+        assert.match(html, new RegExp(`id="${id}"`), id);
+    }
+});
+
+test("explica análise sintática, AST e árvore de derivação", () => {
+    assert.match(html, /O que é análise sintática\? E a AST\?/);
+    assert.match(html, /árvore de derivação/i);
+});
+
+test("possui professor virtual e diálogo da IA", () => {
+    assert.match(html, /id="professor-virtual"/);
+    assert.match(html, /id="dialogo-ia"/);
+    assert.match(fs.readFileSync("ia.js", "utf8"), /fetch\("\/api\/ia\/explicar"/);
+});
+
+test("nginx espera tempo suficiente pelas respostas da IA", () => {
+    assert.match(fs.readFileSync("nginx.conf", "utf8"), /proxy_read_timeout 180s;/);
+});
+
+// AST de "resultado = 10 + 5 * 2", no formato devolvido pelo backend.
+function no(id, tipo, categoria, regra, atributos, posicao, filhos, papel) {
+    return {
+        id, tipo, rotulo: { ADICAO: "Adição", MULTIPLICACAO: "Multiplicação",
+            NUMERO_INTEIRO: "Número inteiro", IDENTIFICADOR: "Identificador",
+            ATRIBUICAO: "Atribuição", PROGRAMA: "Programa" }[tipo],
+        categoria, regra, papel: papel || null, atributos,
+        linha: 1, coluna: posicao[0], linha_fim: 1, coluna_fim: posicao[1], filhos
+    };
+}
+const astExemplo = no(7, "PROGRAMA", "estrutura", "programa", {}, [1, 22], [
+    no(6, "ATRIBUICAO", "comando", "atribuicao_ou_expressao", { operador: "=" }, [1, 22], [
+        no(0, "IDENTIFICADOR", "literal", "atomo", { nome: "resultado" }, [1, 9], [], "alvo"),
+        no(5, "ADICAO", "expressao", "soma", { operador: "+" }, [13, 22], [
+            no(1, "NUMERO_INTEIRO", "literal", "atomo", { valor: "10" }, [13, 14], [], "esquerda"),
+            no(4, "MULTIPLICACAO", "expressao", "termo", { operador: "*" }, [18, 22], [
+                no(2, "NUMERO_INTEIRO", "literal", "atomo", { valor: "5" }, [18, 18], [], "esquerda"),
+                no(3, "NUMERO_INTEIRO", "literal", "atomo", { valor: "2" }, [22, 22], [], "direita")
+            ], "direita")
+        ], "valor")
+    ], "comando")
+]);
+const codigoAst = "resultado = 10 + 5 * 2";
+
+test("rotuloNo mostra tipo e valor de cada nó", () => {
+    const nos = arvore.indexarNos(astExemplo);
+    assert.equal(arvore.rotuloNo(nos[0].no), "Identificador: resultado");
+    assert.equal(arvore.rotuloNo(nos[1].no), "Número inteiro: 10");
+    assert.equal(arvore.rotuloNo(nos[5].no), "Adição (+)");
+    assert.equal(arvore.rotuloNo({ tipo: "FUNCAO", atributos: { nome: "f", parametros: ["a", "b"] } }),
+        "Função f(a, b)");
+});
+
+test("indexarNos guarda o pai de cada nó", () => {
+    const nos = arvore.indexarNos(astExemplo);
+    assert.equal(Object.keys(nos).length, 8);
+    assert.equal(nos[4].pai.tipo, "ADICAO");
+    assert.equal(nos[7].pai, null);
+});
+
+test("lista e diagrama mostram todos os nós com papel e forma", () => {
+    const lista = arvore.renderizarLista(astExemplo);
+    const diagrama = arvore.renderizarDiagrama([astExemplo]);
+    for (const saida of [lista, diagrama]) {
+        assert.equal((saida.match(/class="no-ast/g) || []).length, 8);
+        assert.match(saida, /data-id="4"/);
+        assert.match(saida, /<span class="papel">direita<\/span>/);
+        assert.match(saida, /class="forma" aria-hidden="true">●/);
+    }
+    // Só nós com filhos podem ser recolhidos na lista.
+    assert.equal((lista.match(/<details open>/g) || []).length, 4);
+});
+
+test("renderização da árvore escapa HTML", () => {
+    const perigoso = no(0, "IDENTIFICADOR", "literal", "atomo", { nome: "<img src=x onerror=alert(1)>" }, [1, 1], []);
+    const saida = arvore.renderizarDiagrama([perigoso]) + arvore.renderizarLista(perigoso);
+    assert.doesNotMatch(saida, /<img/);
+    assert.match(saida, /&lt;img/);
+});
+
+test("código destacado marca exatamente o trecho do nó", () => {
+    const preparado = arvore.prepararCodigo(codigoAst);
+    const nos = arvore.indexarNos(astExemplo);
+    assert.equal(
+        arvore.renderizarCodigoDestacado(preparado, nos[4].no),
+        "resultado = 10 + <mark class=\"destaque\">5 * 2</mark>"
+    );
+    assert.equal(arvore.renderizarCodigoDestacado(preparado, null), codigoAst);
+});
+
+test("erro no fim da linha não apaga a quebra de linha", () => {
+    const preparado = arvore.prepararCodigo("x = 1 +\ny = 2");
+    const saida = arvore.renderizarCodigoDestacado(preparado, { linha: 1, coluna: 8 }, "destaque-erro");
+    assert.equal(saida, "x = 1 +<mark class=\"destaque-erro\">␣</mark>\ny = 2");
+});
+
+test("tokensDoNo devolve os tokens cobertos pelo nó", () => {
+    const tokens = [
+        { tipo: "IDENTIFICADOR", lexema: "resultado", linha: 1, coluna: 1 },
+        { tipo: "OPERADOR", lexema: "=", linha: 1, coluna: 11 },
+        { tipo: "LITERAL_INTEIRO", lexema: "10", linha: 1, coluna: 13 },
+        { tipo: "OPERADOR", lexema: "+", linha: 1, coluna: 16 },
+        { tipo: "LITERAL_INTEIRO", lexema: "5", linha: 1, coluna: 18 },
+        { tipo: "OPERADOR", lexema: "*", linha: 1, coluna: 20 },
+        { tipo: "LITERAL_INTEIRO", lexema: "2", linha: 1, coluna: 22 },
+        { tipo: "NOVA_LINHA", lexema: "", linha: 1, coluna: 23 }
+    ];
+    const nos = arvore.indexarNos(astExemplo);
+    assert.deepEqual(arvore.tokensDoNo(nos[4].no, tokens).map((t) => t.lexema), ["5", "*", "2"]);
+    assert.equal(arvore.tokensDoNo(nos[7].no, tokens).length, 7);
+});
+
+test("passos da construção guardam a pilha de regras", () => {
+    const eventos = [
+        { acao: "entrar", regra: "programa" },
+        { acao: "entrar", regra: "atomo" },
+        { acao: "consumir", token: 0 },
+        { acao: "criar", no: 0 },
+        { acao: "sair", regra: "atomo" },
+        { acao: "consumir", token: 1 },
+        { acao: "sair", regra: "programa" }
+    ];
+    const passos = arvore.montarPassosConstrucao(eventos);
+    assert.equal(passos.length, 3);
+    assert.deepEqual(passos[0], { acao: "consumir", token: 0, no: undefined, pilha: ["programa", "atomo"] });
+    assert.deepEqual(passos[2].pilha, ["programa"]);
+});
+
+test("floresta da construção cresce de baixo para cima", () => {
+    const nos = arvore.indexarNos(astExemplo);
+    const passos = [0, 1, 2, 3, 4, 5, 6, 7].map((id) => ({ acao: "criar", no: id, pilha: [] }));
+    // Depois de criar 0..4: 'resultado', '10' e a multiplicação são raízes.
+    let floresta = arvore.florestaNoPasso(passos, 4, nos);
+    assert.deepEqual(floresta.raizes.map((n) => n.id), [0, 1, 4]);
+    assert.equal(floresta.visiveis.size, 5);
+    floresta = arvore.florestaNoPasso(passos, 7, nos);
+    assert.deepEqual(floresta.raizes.map((n) => n.id), [7]);
+    const desenho = arvore.renderizarDiagrama(floresta.raizes, { visiveis: floresta.visiveis, atual: 7 });
+    assert.match(desenho, /no-ast cat-estrutura novo/);
+});
+
+test("árvore de derivação mostra terminais e não terminais", () => {
+    const derivacao = { regra: "programa", filhos: [
+        { regra: "atomo", filhos: [{ terminal: "IDENTIFICADOR", lexema: "x", token: 0 }] },
+        { terminal: "FIM", lexema: "", token: 1 }
+    ] };
+    const saida = arvore.renderizarDerivacao(derivacao);
+    assert.match(saida, /‹programa›/);
+    assert.match(saida, /‹atomo›/);
+    assert.match(saida, /IDENTIFICADOR <code>x<\/code>/);
+    assert.deepEqual(arvore.contarDerivacao(derivacao), { terminais: 2, naoTerminais: 2 });
+});
+
+test("tiposPresentes conta os nós por tipo", () => {
+    assert.deepEqual(arvore.tiposPresentes(arvore.indexarNos(astExemplo)), {
+        PROGRAMA: 1, ATRIBUICAO: 1, IDENTIFICADOR: 1, ADICAO: 1, MULTIPLICACAO: 1, NUMERO_INTEIRO: 3
+    });
+});
+
+test("resposta da IA é exibida sem executar HTML", () => {
+    assert.equal(
+        ia.formatarResposta("**Nó** `ADICAO` <script>alert(1)</script>"),
+        "<strong>Nó</strong> <code>ADICAO</code> &lt;script&gt;alert(1)&lt;/script&gt;"
+    );
+});
+
+test("pedido à IA envia o alvo e o código analisado", () => {
+    assert.deepEqual(ia.montarPedido({ tipo: "no", id: 4 }, "x = 1"),
+        { codigo: "x = 1", alvo: { tipo: "no", id: 4 } });
+    assert.deepEqual(ia.montarPedido({ tipo: "conceito" }, "", "O que é AST?"),
+        { codigo: "", alvo: { tipo: "conceito" }, pergunta: "O que é AST?" });
+});
