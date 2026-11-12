@@ -43,6 +43,34 @@
             "diferente = x != y",
             "ok = x >= 1 and not y <= 0"
         ].join("\n"),
+        precedencia: [
+            "resultado = 10 + 5 * 2",
+            "esquerda = 20 - 5 - 3",
+            "parenteses = (10 + 5) * 2",
+            "potencia = 2 ** 3 ** 2"
+        ].join("\n"),
+        programa: [
+            "def fatorial(n):",
+            "    resultado = 1",
+            "    while n > 1:",
+            "        resultado *= n",
+            "        n -= 1",
+            "    return resultado",
+            "",
+            "for i in range(5):",
+            "    if i % 2 == 0:",
+            "        print(i, fatorial(i))",
+            "    else:",
+            "        print(\"ímpar\")"
+        ].join("\n"),
+        sintaticos: [
+            "total = 10 +",
+            "if total > 5",
+            "    print(total)",
+            "def if(x):",
+            "    return x",
+            "valor = 3 4"
+        ].join("\n"),
         erros: [
             "valor = 10 @ 2",
             "1nome = \"Ana\"",
@@ -264,7 +292,6 @@
     if (typeof document === "undefined") {
         return;
     }
-
         // -- Interface ----------------------------------------------------------
 
     const campoCodigo = document.getElementById("codigo");
@@ -290,13 +317,19 @@
         return (analise.dados[lista] || [])[indice] || null;
     }
 
-    function descreverItem(origem, item) {
+    function botaoIA(tipo, indice, texto) {
+        return "<button type=\"button\" class=\"botao-ia\" data-ia-tipo=\"" + tipo +
+            "\" data-ia-indice=\"" + indice + "\">✨ " + texto + "</button>";
+    }
+
+    function descreverItem(origem, item, indice) {
         if (!item) {
             return "Nenhum token selecionado.";
         }
         if (origem === "erro") {
             return etiqueta("ERRO") + " <strong>" + escaparHtml(item.mensagem) + "</strong>" +
-                "<div>" + escaparHtml(item.dica || "") + "</div>";
+                "<div>" + escaparHtml(item.dica || "") + "</div>" +
+                botaoIA("erro_lexico", indice, "Entender erro com IA");
         }
         if (origem === "comentario") {
             return etiqueta("COMENTARIO") + " <code>" + escaparHtml(item.lexema) + "</code>" +
@@ -306,11 +339,13 @@
             " lexema <code>" + escaparHtml(lexemaVisivel(item.tipo, item.lexema)) + "</code>" +
             " — linha " + item.linha + ", coluna " + item.coluna +
             (item.descricao ? " — " + escaparHtml(item.descricao) : "") +
-            "<div>" + escaparHtml(item.explicacao || "") + "</div>";
+            "<div>" + escaparHtml(item.explicacao || "") + "</div>" +
+            botaoIA("token", indice, "Explicar token com IA");
     }
 
     // Abas
-    const botoesAba = document.querySelectorAll(".abas button");
+    // Só as abas da análise léxica (a análise sintática tem as suas).
+    const botoesAba = document.querySelectorAll("#painel .abas button");
 
     function abrirAba(nome) {
         botoesAba.forEach(function (b) {
@@ -342,7 +377,7 @@
             alvo.classList.add("selecionado");
             alvo.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
-        detalhe.innerHTML = descreverItem(origem, itemDe(origem, indice));
+        detalhe.innerHTML = descreverItem(origem, itemDe(origem, indice), indice);
     }
 
     function ativarSelecao(evento) {
@@ -424,7 +459,7 @@
 
         passoContador.textContent = "Passo " + (passoAtual + 1) + " de " + passos.length;
         passoExplicacao.innerHTML = atual
-            ? descreverItem(atual.origem, itemDe(atual.origem, atual.indice))
+            ? descreverItem(atual.origem, itemDe(atual.origem, atual.indice), atual.indice)
             : "Clique em ▶ para o scanner começar a ler o código a partir da linha 1, coluna 1.";
 
         passoTabela.innerHTML = passos.slice(0, passoAtual + 1).map(function (p, i) {
@@ -600,9 +635,10 @@
             return;
         }
         areaErros.innerHTML = erros.map(function (e, i) {
-            return "<div class=\"erro\" tabindex=\"0\" data-indice=\"" + i + "\"><strong>" +
+            return "<div class=\"erro\" tabindex=\"0\" data-indice=\"" + i + "\">" +
+                "<span class=\"etiqueta-erro lexico\">ERRO LÉXICO</span> <strong>" +
                 escaparHtml(e.mensagem) + "</strong><div class=\"dica\">" + escaparHtml(e.dica || "") +
-                "</div></div>";
+                "</div>" + botaoIA("erro_lexico", i, "Entender erro com IA") + "</div>";
         }).join("");
     }
 
@@ -644,12 +680,17 @@
         mostrarResumo();
         mostrarErros();
         painel.hidden = false;
+        // Avisa os outros módulos da interface (análise sintática e IA).
+        document.dispatchEvent(new CustomEvent("analise-concluida", {
+            detail: { codigo: codigo, dados: dados }
+        }));
     }
 
     function esconderAnalise() {
         pausar();
         analise = null;
         painel.hidden = true;
+        document.dispatchEvent(new CustomEvent("analise-limpa"));
     }
 
     // Fluxo principal (Etapa 2, ampliado)
