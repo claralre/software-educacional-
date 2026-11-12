@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#263b60">
     <title>Software Educacional - Python</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,7 +13,7 @@
     <main>
         <header>
             <h1>Software Educacional</h1>
-            <p>Introdução à análise de código Python — Etapa 3: análise léxica (scanner)</p>
+            <p>Introdução à análise de código Python — análise léxica (scanner) e análise sintática (parser e AST)</p>
         </header>
 
         <details class="cartao" id="tutorial">
@@ -24,6 +25,9 @@
                 <li>Use o <strong>Passo a passo</strong> para ver o scanner percorrendo o código, um token por vez.</li>
                 <li>Consulte a <strong>tabela de tokens</strong>, a <strong>sequência de tokens</strong> e o <strong>resumo</strong> por categoria.</li>
                 <li>Experimente o exemplo <em>Erros léxicos</em> para ver como o scanner reporta problemas sem parar a análise.</li>
+                <li>Na <strong>Análise sintática</strong>, veja a <strong>árvore sintática abstrata (AST)</strong>, toque em um nó para destacar o trecho do código e assista à <strong>construção passo a passo</strong> da árvore.</li>
+                <li>Compare a AST com a <strong>árvore de derivação</strong> e consulte a <strong>gramática</strong> usada pelo parser.</li>
+                <li>Use os botões <strong>✨ Explicar com IA</strong> ou o <strong>professor virtual</strong> para tirar dúvidas (quando o assistente de IA estiver ligado).</li>
             </ol>
         </details>
 
@@ -54,7 +58,10 @@
             <option value="funcao">Função com comentários</option>
             <option value="literais">Literais (inteiros, reais, strings)</option>
             <option value="operadores">Operadores compostos</option>
+            <option value="precedencia">Precedência de operadores</option>
+            <option value="programa">Programa completo (função, laço e if)</option>
             <option value="erros">Erros léxicos</option>
+            <option value="sintaticos">Erros sintáticos</option>
         </select>
 
         <h2>Digite seu código Python</h2>
@@ -70,6 +77,7 @@
         </div>
 
         <section id="painel" hidden>
+            <h2>Análise léxica (tokens)</h2>
             <nav class="abas" role="tablist" aria-label="Visualizações da análise léxica">
                 <button role="tab" data-aba="destaque" aria-selected="true">Código colorido</button>
                 <button role="tab" data-aba="passo">Passo a passo</button>
@@ -143,12 +151,148 @@
             <div id="erros" aria-live="polite"></div>
         </section>
 
+        <section id="painel-sintatico" hidden>
+            <h2>Análise sintática (parser e AST)</h2>
+            <div id="resultado-sintatico" role="status"></div>
+
+            <details class="cartao" id="conceitos-sintatico">
+                <summary>O que é análise sintática? E a AST?</summary>
+                <p>O <strong>analisador sintático</strong> (<em>parser</em>) recebe a sequência de tokens do scanner e
+                   verifica se ela segue as regras da <strong>gramática</strong> da linguagem — como verificar se as
+                   palavras de uma frase estão na ordem certa.</p>
+                <p>Este parser é <strong>descendente recursivo</strong>: cada regra da gramática é uma função que chama
+                   as funções das regras de que depende. A precedência dos operadores vem da própria gramática: a regra
+                   <code>soma</code> chama a regra <code>termo</code>, por isso <code>*</code> fica mais fundo na árvore que <code>+</code>.</p>
+                <ul>
+                    <li><strong>Sequência de tokens</strong>: as “palavras” encontradas pelo scanner.</li>
+                    <li><strong>Árvore de derivação</strong>: mostra todas as regras aplicadas e todos os tokens, inclusive parênteses, ':' e fins de linha.</li>
+                    <li><strong>AST (árvore sintática abstrata)</strong>: versão simplificada, só com o que importa para o significado do programa. É ela que a análise semântica (próxima etapa) vai usar.</li>
+                </ul>
+            </details>
+
+            <div id="sintatico-conteudo">
+                <p class="ajuda">Código analisado (o trecho do nó ou do erro selecionado aparece destacado):</p>
+                <pre id="codigo-sintatico" class="codigo" aria-label="Código analisado"></pre>
+
+                <nav class="abas abas-sintaticas" role="tablist" aria-label="Visualizações da análise sintática">
+                    <button role="tab" data-aba="ast" class="somente-ast" aria-selected="true">Árvore (AST)</button>
+                    <button role="tab" data-aba="construcao" class="somente-ast somente-detalhes">Construção da árvore</button>
+                    <button role="tab" data-aba="derivacao" class="somente-ast somente-detalhes">Árvore de derivação</button>
+                    <button role="tab" data-aba="gramatica">Gramática</button>
+                    <button role="tab" data-aba="json" class="somente-ast">JSON</button>
+                </nav>
+
+                <div class="aba" id="aba-ast" role="tabpanel">
+                    <div class="barra-ferramentas">
+                        <button type="button" id="modo-diagrama" aria-pressed="true">Diagrama</button>
+                        <button type="button" id="modo-lista" aria-pressed="false">Lista</button>
+                        <button type="button" id="expandir-ast">Expandir tudo</button>
+                        <button type="button" id="recolher-ast">Recolher tudo</button>
+                        <label>Destacar tipo de nó
+                            <select id="filtro-no"><option value="">Nenhum</option></select>
+                        </label>
+                    </div>
+                    <p id="contagem-filtro" class="ajuda" aria-live="polite"></p>
+                    <div class="legenda">
+                        <span style="--cor: var(--cat-estrutura)">▣ estrutura</span>
+                        <span style="--cor: var(--cat-comando)">■ comando</span>
+                        <span style="--cor: var(--cat-expressao)">● expressão (operação)</span>
+                        <span style="--cor: var(--cat-literal)">◆ valor ou nome</span>
+                    </div>
+                    <div id="arvore-ast" class="arvore diagrama" aria-label="Árvore sintática abstrata"></div>
+                    <div id="detalhe-no" class="detalhe" aria-live="polite"></div>
+                    <p id="aviso-detalhes" class="ajuda" hidden>O código é grande: a construção passo a passo e a árvore de
+                        derivação foram omitidas para não deixar a página lenta. A AST continua completa.</p>
+                </div>
+
+                <div class="aba" id="aba-construcao" role="tabpanel" hidden>
+                    <p class="ajuda">Veja o parser ler os tokens da esquerda para a direita e montar a AST. Como cada nó
+                        só é criado quando a regra termina, a árvore cresce <strong>de baixo para cima</strong>: primeiro as
+                        folhas, depois os nós que as ligam.</p>
+                    <div class="controles">
+                        <button id="construcao-inicio" aria-label="Voltar ao início">⏮</button>
+                        <button id="construcao-anterior" aria-label="Passo anterior">◀</button>
+                        <button id="construcao-play" aria-label="Reproduzir">▶ Reproduzir</button>
+                        <button id="construcao-proximo" aria-label="Próximo passo">▶|</button>
+                        <button id="construcao-fim" aria-label="Ir ao fim">⏭</button>
+                        <label class="velocidade">Velocidade
+                            <input id="construcao-velocidade" type="range" min="1" max="5" value="3">
+                        </label>
+                        <label class="marcar"><input type="checkbox" id="construcao-so-nos"> Parar só quando um nó é criado</label>
+                    </div>
+                    <div id="construcao-contador" class="contador"></div>
+                    <p class="ajuda">Pilha de regras ativas (da mais externa para a atual):</p>
+                    <div id="construcao-pilha" class="pilha-regras"></div>
+                    <pre id="construcao-codigo" class="codigo"></pre>
+                    <div id="construcao-explicacao" class="detalhe" aria-live="polite"></div>
+                    <div id="construcao-arvore" class="arvore diagrama" aria-label="Árvore em construção"></div>
+                </div>
+
+                <div class="aba" id="aba-derivacao" role="tabpanel" hidden>
+                    <p class="ajuda">A <strong>árvore de derivação</strong> (ou árvore concreta) mostra cada regra da gramática
+                        aplicada (‹não terminais›) e cada token consumido (terminais). A <strong>AST</strong> descarta o que só
+                        serve para a gramática — parênteses, ':', fins de linha e as regras intermediárias da precedência.</p>
+                    <p id="comparacao-arvores" class="detalhe"></p>
+                    <div class="barra-ferramentas">
+                        <button type="button" id="expandir-derivacao">Expandir tudo</button>
+                        <button type="button" id="recolher-derivacao">Recolher tudo</button>
+                    </div>
+                    <div id="arvore-derivacao" class="arvore lista derivacao" aria-label="Árvore de derivação"></div>
+                </div>
+
+                <div class="aba" id="aba-gramatica" role="tabpanel" hidden>
+                    <p class="ajuda">Gramática do subconjunto em EBNF. Símbolo inicial: <code>programa</code>. Em
+                        <code>{ }</code>, repetição (zero ou mais vezes); em <code>[ ]</code>, opcional; <code>|</code> separa
+                        alternativas. A regra do nó ou erro selecionado fica destacada.</p>
+                    <ol id="lista-gramatica" class="gramatica">Carregando...</ol>
+                </div>
+
+                <div class="aba" id="aba-json" role="tabpanel" hidden>
+                    <div class="barra-ferramentas">
+                        <button type="button" id="baixar-json">Baixar AST (ast.json)</button>
+                        <button type="button" id="copiar-json">Copiar JSON</button>
+                    </div>
+                    <p id="aviso-json" class="ajuda" aria-live="polite"></p>
+                    <pre id="json-ast" class="codigo json"></pre>
+                </div>
+            </div>
+
+            <h2>Erros sintáticos</h2>
+            <div id="erros-sintaticos" aria-live="polite"></div>
+        </section>
+
+        <details class="cartao" id="professor-virtual">
+            <summary>✨ Professor virtual (assistente de IA)</summary>
+            <p id="status-ia" class="status-ia" role="status">Verificando o assistente de IA...</p>
+            <p class="ajuda">Faça uma pergunta sobre compiladores. Se você já analisou um código, a pergunta também
+                considera os resultados dele. As respostas são geradas por IA e podem conter erros.</p>
+            <div class="sugestoes">
+                <button type="button" class="sugestao-ia">Qual a diferença entre scanner e parser?</button>
+                <button type="button" class="sugestao-ia">O que são símbolos terminais e não terminais?</button>
+                <button type="button" class="sugestao-ia">Qual a diferença entre AST e árvore de derivação?</button>
+                <button type="button" class="sugestao-ia">Como a gramática define a precedência dos operadores?</button>
+                <button type="button" class="sugestao-ia">O que é recursão à esquerda e por que o parser descendente recursivo a evita?</button>
+            </div>
+            <label for="pergunta-ia">Sua pergunta</label>
+            <textarea id="pergunta-ia" class="pergunta" maxlength="600"></textarea>
+            <button type="button" id="perguntar-ia" class="principal">Perguntar</button>
+            <div id="resposta-professor" aria-live="polite"></div>
+        </details>
+
         <details class="cartao" id="escopo">
             <summary>Escopo léxico suportado</summary>
             <div id="escopo-conteudo">Carregando...</div>
         </details>
     </main>
 
+    <dialog id="dialogo-ia" aria-labelledby="titulo-dialogo-ia">
+        <h2 id="titulo-dialogo-ia">Assistente de IA</h2>
+        <div id="conteudo-dialogo-ia" aria-live="polite"></div>
+        <button type="button" id="fechar-dialogo-ia">Fechar</button>
+    </dialog>
+
     <script src="app.js"></script>
+    <script src="arvore.js"></script>
+    <script src="ia.js"></script>
 </body>
 </html>
