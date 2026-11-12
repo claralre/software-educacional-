@@ -10,3 +10,26 @@ services:
     build: ./backend
     ports:
       - "5001:5000"
+    environment:
+      # Assistente de IA opcional (Etapa 4 — diferencial). Sem o Ollama no ar,
+      # a análise léxica e sintática funciona normalmente.
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODELO=llama3.2
+      - OLLAMA_TEMPO_LIMITE=120
+    depends_on:
+      ollama:
+        condition: service_started
+        required: false
+
+  # Só sobe com: docker compose --profile ia up -d
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    profiles:
+      - ia
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:
