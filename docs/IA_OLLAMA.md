@@ -243,7 +243,6 @@ Executada com o Llama 3.2 real (`llama3.2:latest`, 3B parâmetros, 2,0 GB),
 Ollama no Docker Compose (`--profile ia`), em CPU, sem GPU. As respostas abaixo
 foram copiadas sem edição.
 
-![Explicação de um nó da AST gerada pelo Llama 3.2 na interface](img/demo-ia-no.png)
 
 ### 10.1. Primeira tentativa e ajustes feitos
 
