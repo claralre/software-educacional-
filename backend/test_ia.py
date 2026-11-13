@@ -53,6 +53,27 @@ class TestMontagemDoContexto(unittest.TestCase):
         self.assertIn("programa = { comando } FIM ;", texto)
         self.assertTrue(texto.endswith("Pergunta do estudante: O que é recursão à esquerda?"))
 
+    def test_expressao_inclui_a_precedencia(self):
+        texto = contexto({"tipo": "no", "id": id_do_no("MULTIPLICACAO")})["texto"]
+        self.assertIn("Precedência:", texto)
+        self.assertIn("vira um nó MULTIPLICACAO, filho direito", texto)
+
+    def test_conceito_inclui_o_glossario_do_projeto(self):
+        texto = contexto({"tipo": "conceito"}, codigo="",
+                         pergunta="Qual a diferença entre AST e árvore de derivação?")["texto"]
+        self.assertIn("Definições adotadas no projeto:", texto)
+        self.assertIn("Ela NÃO guarda tipos", texto)
+
+    def test_numeros_citados_no_glossario_conferem(self):
+        _, sintatico = analisar_completo("x = 5 + 3")
+
+        def contar(no):
+            return 1 + sum(contar(f) for f in no.get("filhos", []))
+        self.assertEqual(contar(sintatico["ast"]), 6)
+        self.assertEqual(contar(sintatico["derivacao"]), 38)
+        self.assertIn("38 nós", ia.GLOSSARIO)
+        self.assertIn("6 nós", ia.GLOSSARIO)
+
     def test_pergunta_padrao(self):
         self.assertIn("nó da AST", contexto({"tipo": "no", "id": 0})["pergunta"])
 
