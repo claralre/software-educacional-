@@ -91,6 +91,42 @@ Na aba **Resumo**, veja quantos tokens de cada categoria foram encontrados
 e a lista de identificadores distintos — que, nas próximas etapas, formará
 a **tabela de símbolos**.
 
+## Passo 7 — Da sequência de tokens à árvore (Etapa 4)
+
+1. Escolha o exemplo **Precedência de operadores** e analise.
+2. Na seção **Análise sintática**, aba **Árvore (AST)**, observe a primeira
+   atribuição: em `10 + 5 * 2`, o nó **Multiplicação** fica **abaixo** do nó
+   **Adição**. Quem está mais fundo na árvore é calculado primeiro.
+3. Toque no nó **Multiplicação (\*)**: o trecho `5 * 2` é destacado no código e
+   o painel mostra a regra da gramática que reconheceu o nó (`termo`).
+4. Compare `20 - 5 - 3` (a primeira subtração fica embaixo, à esquerda) com
+   `2 ** 3 ** 2` (a segunda potência fica embaixo, à direita).
+
+**Pergunta:** por que `(10 + 5) * 2` produz uma árvore diferente de `10 + 5 * 2`,
+se os tokens são quase os mesmos?
+
+## Passo 8 — Veja o parser montando a árvore
+
+1. Abra a aba **Construção da árvore** e clique em **▶|** algumas vezes.
+2. Acompanhe a **pilha de regras**: para ler um simples número, o parser
+   atravessa `expressao › ou › e › nao › comparacao › soma › termo › unario ›
+   potencia › primario › atomo`. É assim que a gramática define a precedência.
+3. Marque **Parar só quando um nó é criado** e veja que a árvore cresce **de
+   baixo para cima**: primeiro as folhas, depois os nós que as ligam.
+4. Abra a aba **Árvore de derivação** e compare a quantidade de nós com a da AST.
+
+## Passo 9 — Erros sintáticos
+
+1. Escolha o exemplo **Erros sintáticos** e analise.
+2. Leia cada erro: ele diz o que foi **encontrado**, o que era **esperado** e
+   qual **regra da gramática** foi violada.
+3. Repare que o `if` sem `:` gera **um** erro só, e não um erro para cada linha
+   do seu bloco: o parser se recupera e continua.
+4. Se o assistente de IA estiver ligado, clique em **✨ Entender erro com IA**.
+
+**Pergunta:** por que `x = 10 @ 2` mostra um erro léxico, mas nenhum erro
+sintático?
+
 ## Exercícios
 
 1. Escreva um programa que gere ao menos um token de cada categoria.
@@ -99,3 +135,7 @@ a **tabela de símbolos**.
 4. Crie um bloco `if` dentro de um `while` e conte os tokens `INDENTA` e `DEDENTA`.
 5. Consulte o **Escopo léxico suportado** no fim da página e encontre um
    operador do Python que **não** faz parte do subconjunto.
+6. Escreva uma expressão cuja AST tenha uma **Potência** acima de uma **Adição**.
+7. Escreva um programa com três erros sintáticos diferentes e confira se o parser
+   aponta os três.
+8. Na aba **Gramática**, encontre a regra que impede `a < b < c`.
