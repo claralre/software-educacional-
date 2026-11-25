@@ -373,3 +373,134 @@ test("pedido à IA envia o alvo e o código analisado", () => {
     assert.deepEqual(ia.montarPedido({ tipo: "conceito" }, "", "O que é AST?"),
         { codigo: "", alvo: { tipo: "conceito" }, pergunta: "O que é AST?" });
 });
+
+// -- Etapa 5: análise semântica ----------------------------------------------
+
+const semantica = require("./semantica.js");
+
+// Saída real do backend para:  x = 1 / def f(a): / return a + x / print(f(x))
+const codigoSem = "x = 1\ndef f(a):\n    return a + x\nprint(f(x))";
+const tabelaSem = [
+    { nome: "x", categoria: "variavel", tipo: "int", tipos: ["int"], escopo: "global", escopo_rotulo: "Escopo global",
+        linha: 1, coluna: 1, linha_fim: 1, coluna_fim: 1, no_id: 0,
+        usos: [{ linha: 3, coluna: 16, linha_fim: 3, coluna_fim: 16 }, { linha: 4, coluna: 9, linha_fim: 4, coluna_fim: 9 }] },
+    { nome: "f", categoria: "funcao", tipo: "função", tipos: ["função"], escopo: "global", escopo_rotulo: "Escopo global",
+        linha: 2, coluna: 5, linha_fim: 2, coluna_fim: 5, no_id: 9,
+        usos: [{ linha: 4, coluna: 7, linha_fim: 4, coluna_fim: 7 }], parametros: ["a"], retorno: "desconhecido" },
+    { nome: "a", categoria: "parametro", tipo: "desconhecido", tipos: [], escopo: "f", escopo_rotulo: "Função f",
+        linha: 2, coluna: 7, linha_fim: 2, coluna_fim: 7, no_id: 3,
+        usos: [{ linha: 3, coluna: 12, linha_fim: 3, coluna_fim: 12 }] },
+    { nome: "print", categoria: "embutida", tipo: "função", tipos: ["função"], escopo: "embutido",
+        escopo_rotulo: "Funções embutidas do Python", linha: null, coluna: null, linha_fim: null, coluna_fim: null,
+        no_id: null, usos: [{ linha: 4, coluna: 1, linha_fim: 4, coluna_fim: 5 }], parametros: [], retorno: "None",
+        argumentos: "0 ou mais" }
+];
+const escoposSem = [
+    { nome: "global", rotulo: "Escopo global", tipo: "global", pai: null },
+    { nome: "f", rotulo: "Função f", tipo: "funcao", pai: "global" },
+    { nome: "embutido", rotulo: "Funções embutidas do Python", tipo: "embutido", pai: null }
+];
+
+test("página carrega o script da análise semântica", () => {
+    assert.match(html, /<script src="arvore.js"><\/script>\s*<script src="semantica.js"><\/script>/);
+    assert.match(fs.readFileSync("Dockerfile", "utf8"), /semantica\.js/);
+    assert.match(fs.readFileSync("semantica.js", "utf8"), /fetch\("\/api\/semantica"\)/);
+});
+
+test("possui as seções da análise semântica", () => {
+    for (const id of ["painel-semantico", "resultado-semantico", "fases", "codigo-semantico",
+        "tabela-simbolos", "detalhe-simbolo", "erros-semanticos", "avisos-semanticos",
+        "lista-regras-semanticas", "conceitos-semantico"]) {
+        assert.match(html, new RegExp(`id="${id}"`), id);
+    }
+    assert.match(html, /O que é análise semântica\? E a tabela de símbolos\?/);
+    assert.match(html, /não<\/strong> criam escopo/);
+});
+
+test("exemplos da Etapa 5 estão no seletor e no código", () => {
+    for (const exemplo of ["escopos", "semanticos"]) {
+        assert.match(html, new RegExp(`<option value="${exemplo}">`));
+        assert.match(js, new RegExp(`${exemplo}: \\[`));
+    }
+});
+
+test("rótulos e tipos legíveis na tabela de símbolos", () => {
+    assert.equal(semantica.rotuloCategoria("parametro"), "parâmetro");
+    assert.equal(semantica.rotuloCategoria("embutida"), "função embutida");
+    assert.equal(semantica.descreverTipo(tabelaSem[0]), "int");
+    assert.equal(semantica.descreverTipo(tabelaSem[1]), "função(a) → desconhecido");
+    assert.equal(semantica.descreverTipo(tabelaSem[3]), "função(0 ou mais arg.) → None");
+    assert.equal(semantica.descreverTipo({ categoria: "variavel", tipo: "str", tipos: ["int", "str"] }), "int → str");
+    assert.equal(semantica.descreverTipo({ categoria: "variavel", tipo: "desconhecido", tipos: ["int"] }),
+        "int → desconhecido");
+});
+
+test("tabela de símbolos é agrupada por escopo, na ordem dos escopos", () => {
+    const grupos = semantica.agruparPorEscopo(tabelaSem, escoposSem);
+    assert.deepEqual(grupos.map((g) => g.escopo.nome), ["global", "f", "embutido"]);
+    assert.deepEqual(grupos[0].simbolos.map((s) => s.simbolo.nome), ["x", "f"]);
+    assert.deepEqual(grupos[1].simbolos.map((s) => s.indice), [2]);
+    // Sem embutidas usadas, o grupo "embutido" não aparece.
+    assert.equal(semantica.agruparPorEscopo(tabelaSem.slice(0, 3), escoposSem).length, 2);
+});
+
+test("selecionar um símbolo destaca a definição e todos os usos", () => {
+    const faixas = semantica.faixasDoSimbolo(tabelaSem[0]);
+    assert.deepEqual(faixas.map((f) => f.classe), ["destaque-def", "destaque-uso", "destaque-uso"]);
+    const html2 = semantica.renderizarCodigoMarcado(arvore.prepararCodigo(codigoSem), faixas);
+    const marcas = [...html2.matchAll(/<mark class="([^"]+)">([^<]*)<\/mark>/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(marcas, [["destaque-def", "x"], ["destaque-uso", "x"], ["destaque-uso", "x"]]);
+    assert.equal(html2.replace(/<[^>]+>/g, "").replace(/&gt;/g, ">"), codigoSem);
+    // Embutida: só os usos (não há definição no código).
+    assert.deepEqual(semantica.faixasDoSimbolo(tabelaSem[3]).map((f) => f.classe), ["destaque-uso"]);
+});
+
+test("código marcado escapa HTML", () => {
+    const preparado = arvore.prepararCodigo("s = '<b>'");
+    const html2 = semantica.renderizarCodigoMarcado(preparado,
+        [{ faixa: { linha: 1, coluna: 5, linha_fim: 1, coluna_fim: 9 }, classe: "destaque-uso" }]);
+    assert.ok(!html2.includes("<b>"));
+    assert.match(html2, /&lt;b&gt;/);
+});
+
+test("resumo das três fases mostra onde a análise parou", () => {
+    const ok = semantica.resumoFases({ lexico: { sucesso: true, erros: [] },
+        sintatico: { executado: true, sucesso: true, erros: [] },
+        semantico: { executado: true, sucesso: true, erros: [], avisos: [{}] } });
+    assert.deepEqual(ok.map((f) => f.estado), ["ok", "ok", "aviso"]);
+    const sint = semantica.resumoFases({ lexico: { sucesso: true, erros: [] },
+        sintatico: { executado: true, sucesso: false, erros: [{}, {}] },
+        semantico: { executado: false } });
+    assert.deepEqual(sint.map((f) => f.estado), ["ok", "erro", "nao_executada"]);
+    assert.equal(sint[1].texto, "2 erro(s)");
+    const lex = semantica.resumoFases({ lexico: { sucesso: false, erros: [{}] },
+        sintatico: { executado: false }, semantico: { executado: false } });
+    assert.deepEqual(lex.map((f) => f.estado), ["erro", "nao_executada", "nao_executada"]);
+});
+
+test("distingue visualmente erro léxico, sintático e semântico (texto e estilo)", () => {
+    const css = fs.readFileSync("style.css", "utf8");
+    const sem = fs.readFileSync("semantica.js", "utf8");
+    assert.match(js, /ERRO LÉXICO/);
+    assert.match(fs.readFileSync("arvore.js", "utf8"), /ERRO SINTÁTICO/);
+    assert.match(sem, /ERRO SEMÂNTICO/);
+    assert.match(sem, /AVISO SEMÂNTICO/);
+    for (const classe of ["etiqueta-erro.lexico", "etiqueta-erro.sintatico", "etiqueta-erro.semantico",
+        "erro.erro-semantico", "erro.aviso-semantico"]) {
+        assert.match(css, new RegExp("\\." + classe.replace(".", "\\.")), classe);
+    }
+});
+
+test("diagnóstico semântico mostra regra, explicação, sugestão e erro do Python", () => {
+    const sem = fs.readFileSync("semantica.js", "utf8");
+    for (const trecho of ["Regra:", "Por quê:", "Como corrigir:", "Ao executar, o Python mostraria",
+        "Ver o nó na AST", "erro_semantico", "data-ia-lista"]) {
+        assert.ok(sem.includes(trecho), trecho);
+    }
+});
+
+test("pedido à IA para aviso semântico informa a lista", () => {
+    assert.match(fs.readFileSync("ia.js", "utf8"), /alvo\.lista = botao\.dataset\.iaLista/);
+    const pedido = ia.montarPedido({ tipo: "erro_semantico", indice: 0, lista: "avisos" }, "x = 1");
+    assert.deepEqual(pedido.alvo, { tipo: "erro_semantico", indice: 0, lista: "avisos" });
+});
