@@ -1,7 +1,7 @@
-# Registros para o artigo — Materiais e Métodos (Etapa 4)
+# Registros para o artigo — Materiais e Métodos (Etapas 4 e 5)
 
 Material de apoio para a seção de Materiais e Métodos. Descreve o que foi
-**efetivamente implementado** até a Etapa 4. Comparações com a literatura devem
+**efetivamente implementado** até a Etapa 5. Comparações com a literatura devem
 citar apenas os artigos realmente lidos (seção 5).
 
 ## 1. Fluxograma do sistema
@@ -22,10 +22,15 @@ flowchart TD
     G --> H{Há erros sintáticos?}
     H -- sim --> H1[Erros com linha, coluna, esperado,<br/>encontrado, regra e dica<br/>recuperação em modo pânico]
     H -- não --> I[AST + árvore de derivação<br/>+ passos da construção]
-    I --> J[Apresentação: AST em diagrama ou lista,<br/>construção passo a passo, derivação, JSON]
-    H1 --> J2[Apresentação dos erros<br/>destacados no código]
-    I -.-> K[Análise semântica<br/>Etapa 5 — ainda não implementada]
-    J -.opcional.-> L[Assistente de IA<br/>Ollama + Llama 3.2<br/>explica tokens, nós e erros]
+    H1 --> S0[Análise semântica não executada<br/>sem AST válida]
+    I --> S[Análise semântica<br/>percurso da AST em duas fases]
+    S --> T[Tabela de símbolos por escopo<br/>tipos inferidos, definição e usos]
+    T --> U{Há erros semânticos?}
+    U -- sim --> U1[Erros com regra violada, explicação,<br/>sugestão e erro do Python<br/>avisos separados]
+    U -- não --> J[Apresentação: tokens, AST,<br/>tabela de símbolos e fases]
+    U1 --> J
+    S0 --> J2[Apresentação dos erros léxicos ou sintáticos<br/>destacados no código]
+    J -.opcional.-> L[Assistente de IA<br/>Ollama + Llama 3.2<br/>explica tokens, nós, erros e símbolos]
     J2 -.opcional.-> L
 ```
 
@@ -38,6 +43,7 @@ flowchart TD
 | Backend               | Python 3.11 + Flask 3.1                         | validação, scanner, parser e API |
 | Analisador léxico     | Python, escrito à mão (Etapa 3)                 | tokens com linha e coluna |
 | Analisador sintático  | Python, descendente recursivo, escrito à mão    | gramática EBNF, AST, derivação, erros |
+| Analisador semântico  | Python, percurso da AST (tree walk), escrito à mão | tabela de símbolos, tipos inferidos, erros e avisos semânticos |
 | Assistente de IA (opcional) | Ollama + Llama 3.2 (3B)                   | explicações em linguagem natural |
 | Infraestrutura        | Docker e Docker Compose                          | ambiente reproduzível |
 | Testes                | unittest (Python), Node.js Test Runner, Playwright (Chromium) | testes unitários, de API e de interface |
@@ -72,6 +78,30 @@ flowchart TD
 11. **IA como complemento, não como analisador**: o backend recalcula a análise
     e envia ao modelo apenas os resultados reais do compilador, marcados como
     dados.
+
+## 3.1. Métodos: decisões técnicas da Etapa 5
+
+1. **Regras adaptadas ao Python** (`docs/SEMANTICA.md`, seção 1): sem declarações,
+   “declarar antes de usar” vira “dar valor antes de usar”; sem tipos declarados,
+   os tipos são **inferidos** dos valores e o que se verifica é a compatibilidade
+   dos operandos; só funções criam escopo; a condição booleana do `if` não se aplica.
+2. **Escopo definido antes de programar:** 16 regras de erro e 3 de aviso
+   implementadas; regras não implementadas listadas com justificativa.
+3. **Percurso da AST em duas fases por escopo:** pré-coleta dos nomes que recebem
+   valor (como o Python decide o que é local) e percurso em ordem do texto.
+4. **Tabela de símbolos por escopo** (global, um por função, embutido), com tipo
+   inferido, posição da definição, usos, parâmetros, retorno e sombreamento.
+5. **Análise semântica não executada quando há erros léxicos ou sintáticos**,
+   com aviso ao estudante.
+6. **Sem erros em cascata:** um nome indefinido é apontado uma vez por escopo, e
+   valores de tipo desconhecido não geram erros de tipo.
+7. **Diagnóstico didático:** regra violada, explicação, sugestão de correção
+   (inclusive nome parecido) e o erro que o Python mostraria ao executar.
+8. **Oráculo Python nos testes:** programas de teste executados no próprio Python
+   para confirmar que o erro previsto é o erro real.
+9. **Interface:** faixa das três fases; rótulos distintos para erro léxico,
+   sintático e semântico (texto, cor e estilo de borda); tabela de símbolos
+   interativa com destaque de definição e usos e ligação com o nó da AST.
 
 ## 4. Critérios de avaliação e casos de teste (definidos antes dos resultados)
 
@@ -113,6 +143,47 @@ Resumo:
 
 Os resultados obtidos estão em `docs/RELATORIO_TESTES.md`.
 
+### 4.3 Critérios e casos da Etapa 5
+
+| Critério | Como medir | Meta |
+|----------|------------|------|
+| Correção das regras | cada regra com casos válidos (sem diagnóstico) e inválidos (com o diagnóstico certo) | 100% |
+| Fidelidade ao Python | erro previsto = erro lançado ao executar o programa no Python (oráculo) | 100% |
+| Tabela de símbolos | nomes, tipos, escopos e posições iguais aos esperados; posições iguais às dos tokens | 100% |
+| Ligação com a AST | todo diagnóstico e símbolo aponta para um nó existente, na mesma posição | 100% |
+| Ausência de cascata | um nome indefinido usado várias vezes gera um único erro | 100% |
+| Não execução com erros anteriores | com erro léxico ou sintático, `semantico.executado = false` | 100% |
+| Regressão | testes das Etapas 2 a 4 sem alteração | 100% |
+
+Casos representativos (todos em `backend/test_semantico.py`):
+
+| Id. | Entrada | Resultado esperado |
+|-----|---------|--------------------|
+| M1 | `x = 10` / `print(totl)` | `IDENTIFICADOR_NAO_DEFINIDO`, linha 2, sugestão “total” (NameError) |
+| M2 | `print(y)` / `y = 2` | nome usado antes de receber valor (NameError) |
+| M3 | `x = 1` / `def f():` / `print(x)` / `x = 2` | `VARIAVEL_LOCAL_SEM_VALOR` (UnboundLocalError) |
+| M4 | `idade = 21` / `m = 'idade: ' + idade` | `TIPOS_INCOMPATIVEIS` str e int (TypeError) |
+| M5 | `for i in 10:` | `NAO_ITERAVEL` com sugestão de `range` |
+| M6 | `def f(a, b):` … `f(1)` | `ARGUMENTOS_INCORRETOS` (espera 2, recebeu 1) |
+| M7 | `return 1` fora de função; `break` fora de laço | `RETORNO_FORA_DE_FUNCAO`; `FORA_DE_LACO` |
+| M8 | `x = 10` / `def f():` / `x = 20` | válido; `x` local sombreia o global |
+| M9 | `if c:` / `y = 1` / `print(y)` | aviso `POSSIVELMENTE_NAO_DEFINIDA` |
+| M10 | `x = 5 +` | semântica não executada |
+
+### 4.4 Novidade da Etapa 5 e perguntas de avaliação
+
+Pontos **não identificados nos dez estudos analisados** (sem afirmar ineditismo):
+diagnóstico semântico ligado ao erro real do Python e conferido por oráculo;
+explicação da regra violada com sugestão de correção; tabela de símbolos
+interativa ligada ao código e à AST; regras próprias do Python (escopo por
+função, `UnboundLocalError`) explicadas na interface. Perguntas acrescentadas ao
+formulário (escala de 1 a 5):
+
+- **D6.** A explicação da regra semântica violada, com a sugestão de correção e o
+  erro que o Python mostraria, ajudou você a entender o erro.
+- **D7.** Destacar no código onde cada símbolo é definido e usado ajudou você a
+  entender o que é escopo.
+
 ## 5. Comparação com a literatura
 
 Esta seção resume a análise comparativa do artigo (Seção 4, Quadros 4 a 6). As
@@ -141,7 +212,8 @@ Legenda dos estudos: ✓ presente e confirmado no artigo; ✗ comprovadamente au
 segundo o artigo; NI não identificado no artigo; N/A não aplicável (justificativa no
 Quadro 5 do artigo). Legenda deste sistema: **I** implementado e testado; **P**
 previsto; **F** fora do escopo ou não implementado. A coluna deste sistema
-corresponde à versão `ca70f94` do repositório.
+corresponde à versão `ca70f94` do repositório (Etapa 4); na Etapa 5, análise
+semântica e tabela de símbolos passaram de F para **I**.
 
 | Característica | Este sistema | G22 | B25 | DV23 | KH25 | CM24 | A25 | IA25 | AJ19 | vH20 | Z21 |
 |----------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -188,7 +260,7 @@ o artigo afirma sobre os estudos, sem atribuir ✓ ou ✗ a quem não os mencion
 | Trecho do código destacado ao selecionar token, nó ou erro | sim | B25 destaca o trecho ao passar o mouse; A25 sublinha diagnósticos no código. |
 | AST como diagrama e como lista expandível | sim | Árvores extensas foram criticadas em B25; AJ19 desenha a AST em SVG e recebeu pedido de animar as transições. |
 | Erros com a regra gramatical violada e dica | sim | DV23 associa a regra gramatical e o trecho a cada passo; CM24 distingue tipos de erro em gramáticas. |
-| Exemplos prontos para iniciantes | sim (12) | Pedidos pelos testadores de G22; recomendados para iniciantes em KH25. |
+| Exemplos prontos para iniciantes | sim (14) | Pedidos pelos testadores de G22; recomendados para iniciantes em KH25. |
 | Indicação de erro que não depende só de cor | sim (texto, rótulo e forma) | G22 e DV23 usam verde e vermelho, sem outro sinal mencionado. |
 | Acessibilidade (contraste, teclado, leitor de tela) | parcial: sinais que não dependem só de cor; teclado e fonte relativa previstos (artigo, Seção 5) | Nenhum estudo trata de acessibilidade. |
 | Uso no celular | sim, verificado por emulação | Só G22 afirma ser responsiva, sem avaliação; nenhum estudo avaliou celulares ou tablets. |
