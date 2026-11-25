@@ -121,9 +121,11 @@ Requisição de `POST /api/ia/explicar`:
 | `erro_lexico`    | `indice`    | um erro léxico |
 | `no`             | `id`        | um nó da AST |
 | `erro_sintatico` | `indice`    | um erro sintático |
+| `erro_semantico` | `indice`, `lista` (`erros` ou `avisos`, padrão `erros`) | um erro ou aviso semântico (Etapa 5) |
+| `simbolo`        | `indice`    | um símbolo da tabela de símbolos (Etapa 5) |
 | `conceito`       | —           | pergunta livre ao professor virtual (`pergunta` obrigatória) |
 
-`pergunta` é opcional nos quatro primeiros casos: sem ela, o backend usa uma
+`pergunta` é opcional em todos os casos, exceto `conceito`: sem ela, o backend usa uma
 pergunta padrão para o tipo de alvo.
 
 **Dados reais, não enviados pelo navegador:** o backend **refaz** a análise
@@ -184,6 +186,11 @@ desiste após 150 s.
 - **Explicar token com IA**: no detalhe de um token (aba *Código colorido*).
 - **Entender erro com IA**: em cada erro léxico e em cada erro sintático.
 - **Explicar este nó com IA**: no detalhe de um nó selecionado na AST.
+- **Entender erro com IA** e **Entender aviso com IA** (Etapa 5): em cada erro e aviso
+  semântico. O contexto enviado inclui a regra violada, a explicação, a sugestão e o
+  erro que o Python mostraria.
+- **Explicar este símbolo com IA** (Etapa 5): no detalhe de um símbolo da tabela de
+  símbolos, com tipo, escopo, definição, usos e sombreamento.
 - **Professor virtual**: área de perguntas livres, com sugestões (scanner ×
   parser, terminais e não terminais, AST × árvore de derivação, precedência,
   recursão à esquerda). As perguntas incluem a gramática do projeto e, se houver,
