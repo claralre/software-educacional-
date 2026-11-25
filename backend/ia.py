@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.request
 
+from analisador_semantico import analisar_semanticamente
 from analisador_sintatico import GRAMATICA, ORDEM_GRAMATICA
 
 BASE_URL = os.environ.get("OLLAMA_BASE_URL", "").strip().rstrip("/")
@@ -37,7 +38,7 @@ AVISO = (
 INSTRUCAO_SISTEMA = """Você é um professor especialista em Compiladores e Linguagens Formais.
 Sua função é explicar didaticamente os resultados produzidos por um software educacional de compiladores para um subconjunto da linguagem Python.
 
-O sistema poderá fornecer: código-fonte; tokens; gramática utilizada (EBNF); AST; erros léxicos ou sintáticos; perguntas do estudante.
+O sistema poderá fornecer: código-fonte; tokens; gramática utilizada (EBNF); AST; tabela de símbolos; erros léxicos, sintáticos ou semânticos; perguntas do estudante.
 
 Regras obrigatórias:
 1. Explique em português do Brasil, com linguagem clara e exemplos simples.
@@ -46,7 +47,7 @@ Regras obrigatórias:
 4. Ao explicar a AST, descreva a função dos nós e a relação entre eles.
 5. Ao explicar erros sintáticos, indique a regra gramatical relacionada, quando disponível.
 6. Não invente tokens, nós ou erros que não estejam nos dados recebidos.
-7. Não afirme que o compilador realizou uma análise não apresentada (a análise semântica ainda não foi implementada).
+7. Não afirme que o compilador realizou uma análise que não aparece nos dados. A análise semântica deste projeto é para Python: não há declarações nem tipos declarados; os tipos são inferidos.
 8. Se alguma informação estiver ausente, informe essa limitação.
 9. Não substitua a análise realizada pelo scanner ou parser: não dê outro diagnóstico diferente do recebido.
 10. Diferencie claramente os conceitos teóricos dos resultados efetivamente produzidos.
@@ -205,7 +206,10 @@ GLOSSARIO = """- Scanner (analisador léxico): lê o código caractere a caracte
 - Gramática: conjunto de regras (produções) em EBNF. Símbolo inicial: programa.
 - Símbolos terminais: os tokens (ex.: IDENTIFICADOR, "+", NOVA_LINHA). Não terminais: os nomes das regras (ex.: soma, termo, expressao), que se expandem em outros símbolos.
 - Árvore de derivação (árvore concreta): mostra TODAS as regras aplicadas (não terminais) e TODOS os tokens consumidos (terminais), inclusive parênteses, ':' e fins de linha. Para x = 5 + 3 ela tem 38 nós.
-- AST (árvore sintática ABSTRATA): versão simplificada construída pelo parser durante a análise sintática; guarda só o que importa para o significado (atribuições, operações, valores) e descarta parênteses, ':', fins de linha e as regras intermediárias de precedência. Para x = 5 + 3 ela tem 6 nós. Ela NÃO guarda tipos: tipos e tabela de símbolos são da análise semântica (Etapa 5, ainda não implementada).
+- AST (árvore sintática ABSTRATA): versão simplificada construída pelo parser durante a análise sintática; guarda só o que importa para o significado (atribuições, operações, valores) e descarta parênteses, ':', fins de linha e as regras intermediárias de precedência. Para x = 5 + 3 ela tem 6 nós. Ela NÃO guarda tipos: tipos e tabela de símbolos são da análise semântica, que percorre a AST depois.
+- Análise semântica: percorre a AST e verifica se o programa faz sentido (por exemplo, se um nome recebeu valor antes de ser usado e se os tipos combinam). Em Python não há declarações: uma variável passa a existir quando recebe um valor, e os tipos são inferidos dos valores.
+- Tabela de símbolos: lista dos nomes do programa (variáveis, funções, parâmetros), com tipo, escopo e posição.
+- Escopo: região onde um nome é visível. Em Python há o escopo global, um escopo por função e o das funções embutidas; blocos de if, while e for NÃO criam escopo.
 - Recursão à esquerda: regra como soma = soma "+" termo, que faria um parser descendente recursivo chamar soma para sempre; por isso a gramática usa repetição: soma = termo { "+" termo }."""
 
 PERGUNTAS_PADRAO = {
@@ -217,6 +221,11 @@ PERGUNTAS_PADRAO = {
                       "o que a regra esperava, por que o código não a atende e como corrigir.",
     "erro_lexico": "Explique este erro léxico: por que o scanner não reconheceu este trecho "
                    "e como corrigir.",
+    "erro_semantico": "Explique este diagnóstico semântico: qual regra de significado do Python foi "
+                      "violada, por que o programa, mesmo com a gramática correta, não faz sentido "
+                      "aqui, e como corrigir.",
+    "simbolo": "Explique este símbolo da tabela de símbolos: o que ele representa, por que tem este "
+               "tipo e este escopo, e onde é definido e usado.",
 }
 
 DESCRICAO_PEDIDO = {
@@ -225,6 +234,8 @@ DESCRICAO_PEDIDO = {
     "erro_sintatico": "explicação de um erro sintático",
     "erro_lexico": "explicação de um erro léxico",
     "conceito": "pergunta conceitual ao professor virtual",
+    "erro_semantico": "explicação de um erro ou aviso semântico",
+    "simbolo": "explicação de um símbolo da tabela de símbolos (análise semântica)",
 }
 
 
@@ -276,7 +287,8 @@ def montar_contexto(dados, analisar_completo):
     alvo = dados.get("alvo") or {"tipo": "conceito"}
     if not isinstance(alvo, dict) or alvo.get("tipo") not in DESCRICAO_PEDIDO:
         raise PedidoInvalido(
-            "Informe o alvo da explicação: token, no, erro_sintatico, erro_lexico ou conceito.")
+            "Informe o alvo da explicação: token, no, erro_lexico, erro_sintatico, erro_semantico, "
+            "simbolo ou conceito.")
     tipo = alvo["tipo"]
 
     pergunta = dados.get("pergunta") or ""
@@ -367,6 +379,47 @@ def montar_contexto(dados, analisar_completo):
         ]
         if no["categoria"] == "expressao" or (ancestrais and ancestrais[-1]["categoria"] == "expressao"):
             partes += ["Precedência:", PRECEDENCIA]
+    elif tipo in ("erro_semantico", "simbolo"):
+        if not sintatico["sucesso"]:
+            raise PedidoInvalido("O código tem erros léxicos ou sintáticos, então a análise "
+                                 "semântica não foi executada.")
+        semantico = analisar_semanticamente(sintatico["ast"], lexico["tokens"])
+        indice = _inteiro(alvo.get("indice"), "indice")
+        if tipo == "erro_semantico":
+            lista = alvo.get("lista") or "erros"
+            if lista not in ("erros", "avisos"):
+                raise PedidoInvalido("A lista deve ser 'erros' ou 'avisos'.")
+            if indice >= len(semantico[lista]):
+                raise PedidoInvalido("O diagnóstico semântico indicado não existe no código analisado.")
+            d = semantico[lista][indice]
+            partes += [("Erro" if lista == "erros" else "Aviso") + " semântico informado pelo analisador:",
+                       f"- mensagem: {d['mensagem']}",
+                       f"- regra violada: {d['regra']} ({d['titulo']})",
+                       f"- explicação da regra no projeto: {d['explicacao']}",
+                       f"- erro que o Python mostraria ao executar: {d['erro_python']}",
+                       f"- sugestão do sistema: {d['sugestao'] or '(nenhuma)'}",
+                       "Linha do diagnóstico:",
+                       _linhas_do_codigo(codigo, d["linha"], d["linha_fim"])]
+        else:
+            tabela = semantico["tabela_simbolos"]
+            if indice >= len(tabela):
+                raise PedidoInvalido("O símbolo indicado não existe na tabela de símbolos.")
+            s = tabela[indice]
+            usos = ", ".join(f"linha {u['linha']}, coluna {u['coluna']}" for u in s["usos"][:10]) or "nenhum"
+            partes += ["Símbolo selecionado da tabela de símbolos:",
+                       f"- nome: {s['nome']}",
+                       f"- categoria: {s['categoria']}",
+                       f"- tipo inferido: {s['tipo']} (tipos ao longo do programa: "
+                       f"{', '.join(s['tipos']) or 'desconhecido'})",
+                       f"- escopo: {s['escopo_rotulo']}",
+                       f"- definido em: " + (f"linha {s['linha']}, coluna {s['coluna']}"
+                                             if s["linha"] else "função embutida do Python"),
+                       f"- usos: {usos}"]
+            if s.get("parametros"):
+                partes.append(f"- parâmetros: {', '.join(s['parametros'])}")
+            if s.get("sombreia"):
+                partes.append(f"- sombreia: {s['sombreia']}")
+            partes += ["Escopos do programa: " + ", ".join(e["rotulo"] for e in semantico["escopos"])]
     else:  # conceito
         partes += ["Definições adotadas no projeto:", GLOSSARIO,
                    "Gramática do subconjunto (EBNF) usada pelo parser do projeto:",
