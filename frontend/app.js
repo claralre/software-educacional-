@@ -71,6 +71,31 @@
             "    return x",
             "valor = 3 4"
         ].join("\n"),
+        escopos: [
+            "limite = 3",
+            "total = 0",
+            "",
+            "def dobro(x):",
+            "    total = x * 2  # variável local: sombreia o total global",
+            "    return total",
+            "",
+            "for i in range(limite):",
+            "    total += dobro(i)",
+            "print(\"Total:\", total)"
+        ].join("\n"),
+        semanticos: [
+            "idade = 21",
+            "mensagem = \"Idade: \" + idade",
+            "print(idad)",
+            "",
+            "def area(base, altura):",
+            "    return base * altura",
+            "",
+            "area(5)",
+            "for letra in 10:",
+            "    print(letra)",
+            "break"
+        ].join("\n"),
         erros: [
             "valor = 10 @ 2",
             "1nome = \"Ana\"",
@@ -622,7 +647,7 @@
             (identificadores.length
                 ? identificadores.map(function (i) { return "<code>" + escaparHtml(i) + "</code>"; }).join(" ")
                 : "Nenhum.") +
-            "</p><p class=\"ajuda\">Nas próximas etapas, esses nomes formarão a tabela de símbolos.</p>";
+            "</p><p class=\"ajuda\">Na análise semântica (mais abaixo), esses nomes aparecem na tabela de símbolos, com tipo e escopo.</p>";
     }
 
     // Erros
