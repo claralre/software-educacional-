@@ -149,7 +149,8 @@ construção não faz parte do subconjunto):
 **Verificações deixadas para a análise semântica (Etapa 5):** `return` fora de
 função, `break`/`continue` fora de laço, uso de variável não definida, número
 de argumentos de uma chamada e tipos. Elas dependem do significado do
-programa, não da sua forma.
+programa, não da sua forma. Foram implementadas na Etapa 5: veja
+[`SEMANTICA.md`](SEMANTICA.md).
 
 ## 5. Estratégia: parser descendente recursivo escrito à mão
 
