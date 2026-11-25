@@ -205,7 +205,8 @@ AST continua sendo enviada.
 
 ## 7. Relação com a Etapa 5
 
-A AST foi projetada para a análise semântica:
+A AST foi projetada para a análise semântica, implementada na Etapa 5
+([`SEMANTICA.md`](SEMANTICA.md)), que usa os campos abaixo:
 
 - os nós `IDENTIFICADOR`, `ATRIBUICAO`, `FUNCAO` e `PARAMETRO` guardam os
   nomes necessários para a **tabela de símbolos**;
