@@ -62,6 +62,8 @@
             <option value="programa">Programa completo (função, laço e if)</option>
             <option value="erros">Erros léxicos</option>
             <option value="sintaticos">Erros sintáticos</option>
+            <option value="escopos">Escopos e tabela de símbolos</option>
+            <option value="semanticos">Erros semânticos</option>
         </select>
 
         <h2>Digite seu código Python</h2>
@@ -75,6 +77,7 @@
         <div id="resultado" role="status">
             Aguardando código...
         </div>
+        <div id="fases" class="fases" aria-label="Situação das três análises"></div>
 
         <section id="painel" hidden>
             <h2>Análise léxica (tokens)</h2>
@@ -166,7 +169,7 @@
                 <ul>
                     <li><strong>Sequência de tokens</strong>: as “palavras” encontradas pelo scanner.</li>
                     <li><strong>Árvore de derivação</strong>: mostra todas as regras aplicadas e todos os tokens, inclusive parênteses, ':' e fins de linha.</li>
-                    <li><strong>AST (árvore sintática abstrata)</strong>: versão simplificada, só com o que importa para o significado do programa. É ela que a análise semântica (próxima etapa) vai usar.</li>
+                    <li><strong>AST (árvore sintática abstrata)</strong>: versão simplificada, só com o que importa para o significado do programa. É ela que a análise semântica (mais abaixo) percorre.</li>
                 </ul>
             </details>
 
@@ -261,6 +264,60 @@
             <div id="erros-sintaticos" aria-live="polite"></div>
         </section>
 
+        <section id="painel-semantico" hidden>
+            <h2>Análise semântica (significado)</h2>
+            <div id="resultado-semantico" role="status"></div>
+
+            <details class="cartao" id="conceitos-semantico">
+                <summary>O que é análise semântica? E a tabela de símbolos?</summary>
+                <p>O scanner reconheceu as palavras; o parser verificou se elas formam frases válidas. A
+                   <strong>análise semântica</strong> verifica se o programa <strong>faz sentido</strong>: uma frase pode
+                   ter a gramática certa e não ter sentido, como “a pedra comeu o bolo”.</p>
+                <p>O analisador semântico <strong>percorre a AST</strong> e monta a <strong>tabela de símbolos</strong>:
+                   a lista dos nomes do programa (variáveis, funções, parâmetros), com tipo, escopo e onde são definidos e usados.</p>
+                <ul>
+                    <li><strong>Python não tem declarações</strong>: uma variável passa a existir quando recebe um valor
+                        (<code>total = 0</code>). Por isso a regra “declarar antes de usar” vira “<strong>dar valor antes de usar</strong>”.</li>
+                    <li><strong>Os tipos não são escritos no código</strong>: cada valor tem um tipo (<code>21</code> é
+                        <code>int</code>, <code>"Ana"</code> é <code>str</code>), e o analisador <strong>infere</strong> o tipo de cada variável.</li>
+                    <li><strong>Escopo</strong> é onde um nome vale. Em Python há o escopo global, um escopo por função e o das
+                        funções embutidas (<code>print</code>, <code>len</code>…). Blocos de <code>if</code>, <code>while</code> e
+                        <code>for</code> <strong>não</strong> criam escopo, diferente de C e Java.</li>
+                    <li>Cada erro semântico mostra a <strong>regra violada</strong>, o porquê, como corrigir e o erro que o
+                        Python mostraria ao executar (<code>NameError</code>, <code>TypeError</code>…).</li>
+                </ul>
+            </details>
+
+            <div id="semantico-conteudo">
+                <p class="ajuda">Código analisado (ao selecionar um símbolo, a <mark class="destaque-def">definição</mark>
+                    e os <mark class="destaque-uso">usos</mark> aparecem destacados):</p>
+                <pre id="codigo-semantico" class="codigo" aria-label="Código analisado"></pre>
+
+                <nav class="abas abas-semanticas" role="tablist" aria-label="Visualizações da análise semântica">
+                    <button role="tab" data-aba="simbolos" aria-selected="true">Tabela de símbolos</button>
+                    <button role="tab" data-aba="regras-semanticas">Regras semânticas</button>
+                </nav>
+
+                <div class="aba" id="aba-simbolos" role="tabpanel">
+                    <div id="tabela-simbolos"></div>
+                    <div id="detalhe-simbolo" class="detalhe" aria-live="polite"></div>
+                </div>
+
+                <div class="aba" id="aba-regras-semanticas" role="tabpanel" hidden>
+                    <p class="ajuda">Regras de significado verificadas por este analisador. Erros impedem o programa de
+                        funcionar; avisos indicam algo permitido, mas arriscado. A regra do diagnóstico selecionado fica destacada.</p>
+                    <ol id="lista-regras-semanticas" class="gramatica regras-semanticas">Carregando...</ol>
+                </div>
+            </div>
+
+            <h2>Erros semânticos</h2>
+            <div id="erros-semanticos" aria-live="polite"></div>
+            <div id="bloco-avisos">
+                <h3>Avisos semânticos</h3>
+                <div id="avisos-semanticos" aria-live="polite"></div>
+            </div>
+        </section>
+
         <details class="cartao" id="professor-virtual">
             <summary>✨ Professor virtual (assistente de IA)</summary>
             <p id="status-ia" class="status-ia" role="status">Verificando o assistente de IA...</p>
@@ -272,6 +329,8 @@
                 <button type="button" class="sugestao-ia">Qual a diferença entre AST e árvore de derivação?</button>
                 <button type="button" class="sugestao-ia">Como a gramática define a precedência dos operadores?</button>
                 <button type="button" class="sugestao-ia">O que é recursão à esquerda e por que o parser descendente recursivo a evita?</button>
+                <button type="button" class="sugestao-ia">O que a análise semântica verifica que o parser não verifica?</button>
+                <button type="button" class="sugestao-ia">O que é a tabela de símbolos e o que é escopo?</button>
             </div>
             <label for="pergunta-ia">Sua pergunta</label>
             <textarea id="pergunta-ia" class="pergunta" maxlength="600"></textarea>
@@ -293,6 +352,7 @@
 
     <script src="app.js"></script>
     <script src="arvore.js"></script>
+    <script src="semantica.js"></script>
     <script src="ia.js"></script>
 </body>
 </html>
