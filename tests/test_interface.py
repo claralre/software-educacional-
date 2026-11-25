@@ -412,6 +412,134 @@ def testar_ia_contextual(navegador):
     pagina.close()
 
 
+
+# -- Etapa 5: análise semântica ------------------------------------------------
+
+def testar_tabela_de_simbolos(navegador):
+    pagina, erros_js = abrir(navegador)
+
+    pagina.locator("#exemplos").select_option("escopos")
+    pagina.locator("#analisar").click()
+    expect(pagina.locator("#resultado-semantico")).to_contain_text("nenhum erro semântico")
+    expect(pagina.locator("#fases .fase-ok")).to_have_count(3)
+
+    grupos = pagina.locator("#tabela-simbolos .grupo-escopo h3")
+    expect(grupos).to_have_count(3)
+    expect(grupos.nth(0)).to_contain_text("Escopo global")
+    expect(grupos.nth(1)).to_contain_text("Função dobro")
+    expect(grupos.nth(2)).to_contain_text("Funções embutidas")
+
+    # O total local sombreia o total global.
+    local = pagina.locator(".escopo-funcao tr", has_text="total")
+    expect(local.locator(".marca-sombra")).to_have_count(1)
+
+    # Selecionar o total global destaca a definição e os dois usos.
+    pagina.locator(".escopo-global tr", has_text="total").first.click()
+    expect(pagina.locator("#codigo-semantico mark.destaque-def")).to_have_count(1)
+    expect(pagina.locator("#codigo-semantico mark.destaque-uso")).to_have_count(2)
+    expect(pagina.locator("#detalhe-simbolo")).to_contain_text("variável do escopo global")
+
+    # Relação com a AST: o botão seleciona o nó correspondente na árvore.
+    pagina.locator("#detalhe-simbolo .ver-no").click()
+    selecionado = pagina.locator("#arvore-ast .no-ast.selecionado")
+    expect(selecionado).to_have_count(1)
+    expect(selecionado).to_contain_text("total")
+
+    assert erros_js == [], erros_js
+    pagina.close()
+
+
+def testar_erros_semanticos(navegador):
+    pagina, erros_js = abrir(navegador)
+
+    pagina.locator("#exemplos").select_option("semanticos")
+    pagina.locator("#analisar").click()
+    erros = pagina.locator("#erros-semanticos .erro-semantico")
+    expect(erros).to_have_count(5)
+    expect(erros.first.locator(".etiqueta-erro")).to_have_text("ERRO SEMÂNTICO")
+    expect(erros.first).to_contain_text("linha 2, coluna 12")
+    expect(erros.first).to_contain_text("entre str e int")
+    expect(erros.first).to_contain_text("Ao executar, o Python mostraria: TypeError")
+    expect(erros.nth(1)).to_contain_text("Você quis dizer 'idade'?")
+    expect(pagina.locator("#fases .fase-erro")).to_contain_text("Semântica")
+
+    # Clicar no erro destaca o trecho e a regra.
+    erros.nth(1).click()
+    expect(pagina.locator("#codigo-semantico mark.destaque-erro")).to_have_text("idad")
+    pagina.get_by_role("tab", name="Regras semânticas").click()
+    expect(pagina.locator("#lista-regras-semanticas li.regra-ativa")).to_contain_text("Nome usado sem ter recebido valor")
+
+    # O erro aponta para um nó existente na AST.
+    erros.nth(2).locator(".ver-no").click()
+    expect(pagina.locator("#arvore-ast .no-ast.selecionado")).to_contain_text("Chamada")
+
+    # Aviso: aparece separado, sem reprovar o programa.
+    analisar(pagina, "x = 1\nx = 'a'\nprint(x)")
+    expect(pagina.locator("#erros-semanticos")).to_contain_text("Nenhum erro semântico")
+    expect(pagina.locator("#avisos-semanticos .etiqueta-erro")).to_have_text("AVISO SEMÂNTICO")
+    expect(pagina.locator("#fases .fase-aviso")).to_contain_text("1 aviso(s)")
+
+    assert erros_js == [], erros_js
+    pagina.close()
+
+
+def testar_tres_tipos_de_erro_e_semantica_nao_executada(navegador):
+    pagina, erros_js = abrir(navegador)
+
+    analisar(pagina, "x = 5 @ 2")
+    expect(pagina.locator("#erros .etiqueta-erro")).to_have_text("ERRO LÉXICO")
+    expect(pagina.locator("#resultado-semantico")).to_contain_text("erros léxicos")
+    expect(pagina.locator("#fases .fase-nao_executada")).to_have_count(2)
+
+    analisar(pagina, "x = 5 +")
+    expect(pagina.locator("#erros-sintaticos .etiqueta-erro")).to_have_text("ERRO SINTÁTICO")
+    expect(pagina.locator("#resultado-semantico")).to_contain_text("erros sintáticos")
+    expect(pagina.locator("#semantico-conteudo")).to_be_hidden()
+    expect(pagina.locator("#bloco-avisos")).to_be_hidden()
+
+    analisar(pagina, "print(y)")
+    expect(pagina.locator("#erros-semanticos .etiqueta-erro")).to_have_text("ERRO SEMÂNTICO")
+    expect(pagina.locator("#erros-sintaticos")).to_contain_text("Nenhum erro sintático")
+
+    assert erros_js == [], erros_js
+    pagina.close()
+
+
+def testar_consistencia_simbolos_tokens_e_ast(navegador):
+    pagina, erros_js = abrir(navegador)
+
+    analisar(pagina, "conta = 10\nresultado = conta * 2")
+    linha = pagina.locator(".escopo-global tr", has_text="resultado")
+    expect(linha).to_contain_text("linha 2, coluna 1")
+    # A mesma posição na tabela de tokens.
+    pagina.get_by_role("tab", name="Tabela de tokens").click()
+    token = pagina.locator("#tabela-tokens tbody tr", has_text="resultado").first
+    expect(token.locator("td").nth(3)).to_have_text("2")
+    expect(token.locator("td").nth(4)).to_have_text("1")
+
+    assert erros_js == [], erros_js
+    pagina.close()
+
+
+def testar_semantica_no_celular(navegador):
+    pagina, erros_js = abrir(
+        navegador,
+        viewport={"width": 375, "height": 740},
+        is_mobile=True,
+        has_touch=True,
+    )
+    pagina.locator("#exemplos").select_option("semanticos")
+    pagina.locator("#analisar").tap()
+    expect(pagina.locator("#erros-semanticos .erro-semantico")).to_have_count(5)
+    pagina.locator(".escopo-global tr", has_text="idade").tap()
+    expect(pagina.locator("#codigo-semantico mark.destaque-def")).to_have_count(1)
+    largura = pagina.evaluate("document.documentElement.scrollWidth")
+    assert largura <= 375, f"A página tem rolagem horizontal ({largura}px)"
+
+    assert erros_js == [], erros_js
+    pagina.close()
+
+
 TESTES = [
     testar_regressao_etapa2,
     testar_tabela_de_tokens,
@@ -429,6 +557,11 @@ TESTES = [
     testar_consistencia_tokens_e_arvore,
     testar_entrada_grande_nao_trava,
     testar_ia_contextual,
+    testar_tabela_de_simbolos,
+    testar_erros_semanticos,
+    testar_tres_tipos_de_erro_e_semantica_nao_executada,
+    testar_consistencia_simbolos_tokens_e_ast,
+    testar_semantica_no_celular,
 ]
 
 
