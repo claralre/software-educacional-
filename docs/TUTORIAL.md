@@ -1,4 +1,4 @@
-# Tutorial — Entendendo a Análise Léxica com o Software Educacional
+# Tutorial — Entendendo as Análises Léxica, Sintática e Semântica com o Software Educacional
 
 Este tutorial é destinado a estudantes que estão começando a estudar
 compiladores. Ele leva cerca de 15 minutos.
@@ -127,6 +127,36 @@ se os tokens são quase os mesmos?
 **Pergunta:** por que `x = 10 @ 2` mostra um erro léxico, mas nenhum erro
 sintático?
 
+## Passo 10 — A tabela de símbolos (Etapa 5)
+
+1. Escolha o exemplo **Escopos e tabela de símbolos** e analise.
+2. Abaixo do resultado, veja a faixa **Léxica → Sintática → Semântica**: as três
+   fases passaram.
+3. Na seção **Análise semântica**, a tabela aparece dividida em **escopos**: o global,
+   o da função `dobro` e o das funções embutidas (`range`, `print`).
+4. Clique na linha do `total` do **escopo global**: a definição fica verde e os usos,
+   azuis, no código. Repare que a variável `i` do `for` está no escopo global, porque
+   em Python o `for` **não** cria escopo.
+5. Agora veja o `total` dentro da função: ele tem a marca **sombreia**. É outra
+   variável, local da função, que esconde o `total` global.
+6. Clique em **🌳 Ver o nó na AST** e veja de qual nó da árvore o símbolo veio.
+
+**Pergunta:** por que o tipo do `total` global aparece como `int → desconhecido`?
+
+## Passo 11 — Erros semânticos
+
+1. Escolha o exemplo **Erros semânticos** e analise. Não há erro léxico nem
+   sintático: todas as frases estão “bem escritas”, mas algumas não fazem sentido.
+2. Leia cada erro: a **regra** violada, o **porquê**, **como corrigir** e o erro que o
+   **Python mostraria** ao executar (`NameError`, `TypeError`…).
+3. Clique no erro de `idad`: o trecho é destacado e o sistema pergunta “Você quis
+   dizer 'idade'?”.
+4. Abra a aba **Regras semânticas** e encontre a regra do erro selecionado.
+5. Digite `x = 1` e, na linha de baixo, `x = "a"`: aparece um **aviso**, não um erro.
+   Python permite mudar o tipo de uma variável, mas isso costuma confundir.
+
+**Pergunta:** `x = 5 +` mostra erro sintático e nenhum erro semântico. Por quê?
+
 ## Exercícios
 
 1. Escreva um programa que gere ao menos um token de cada categoria.
@@ -139,3 +169,9 @@ sintático?
 7. Escreva um programa com três erros sintáticos diferentes e confira se o parser
    aponta os três.
 8. Na aba **Gramática**, encontre a regra que impede `a < b < c`.
+9. Escreva um programa sem erros em que um mesmo nome apareça em dois escopos
+   diferentes da tabela de símbolos.
+10. Escreva uma linha com erro semântico de tipo e corrija-a de duas formas
+    diferentes, seguindo a sugestão do sistema.
+11. Em `x = 1`, `def f():`, `print(x)`, `x = 2`, `f()`, o Python dá erro mesmo
+    existindo um `x` global. Use o sistema para descobrir por quê.
