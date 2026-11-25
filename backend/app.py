@@ -7,6 +7,7 @@ from analisador_sintatico import (
     TIPOS_NO,
     analisar_sintaticamente,
 )
+from analisador_semantico import EMBUTIDAS, ORDEM_REGRAS, REGRAS, analisar_semanticamente
 from scanner import analisar_lexicamente, escopo_lexico
 
 app = Flask(__name__)
@@ -97,6 +98,39 @@ def analisar_completo(codigo):
     return lexico, {chave: sintatico[chave] for chave in ordem}
 
 
+def analisar_semantica(lexico, sintatico):
+    """Executa a análise semântica só quando há uma AST válida."""
+    vazio = {"tabela_simbolos": [], "escopos": [], "erros": [], "avisos": [], "resumo": None}
+    if lexico["erros"]:
+        return {"executado": False, "sucesso": False, **vazio, "mensagem": (
+            "Análise semântica não executada: corrija primeiro os erros léxicos. Sem uma "
+            "sequência de tokens válida não há AST para analisar.")}
+    if not sintatico["sucesso"]:
+        return {"executado": False, "sucesso": False, **vazio, "mensagem": (
+            "Análise semântica não executada: corrija primeiro os erros sintáticos. Com uma "
+            "AST incompleta, a análise semântica apontaria erros que não existem.")}
+
+    semantico = analisar_semanticamente(sintatico["ast"], lexico["tokens"])
+    resumo = semantico["resumo"]
+    avisos = f" e {resumo['total_avisos']} aviso(s)" if resumo["total_avisos"] else ""
+    if semantico["sucesso"]:
+        mensagem = (f"Análise semântica concluída: nenhum erro semântico{avisos}. "
+                    f"Tabela de símbolos com {resumo['total_simbolos']} símbolo(s).")
+    else:
+        mensagem = (f"Análise semântica concluída com {resumo['total_erros']} erro(s) "
+                    f"semântico(s){avisos}.")
+    ordem = ["executado", "sucesso", "mensagem", "tabela_simbolos", "escopos", "erros",
+             "avisos", "resumo"]
+    semantico = {"executado": True, "mensagem": mensagem, **semantico}
+    return {chave: semantico[chave] for chave in ordem}
+
+
+def analisar_tudo(codigo):
+    """Léxica, sintática e semântica, nesta ordem."""
+    lexico, sintatico = analisar_completo(codigo)
+    return lexico, sintatico, analisar_semantica(lexico, sintatico)
+
+
 @app.route("/")
 def inicio():
     return jsonify(mensagem="Hello, World!")
@@ -119,6 +153,14 @@ def gramatica():
     ), 200
 
 
+@app.route("/semantica", methods=["GET"])
+def semantica():
+    return jsonify(
+        regras=[{"codigo": codigo, **REGRAS[codigo]} for codigo in ORDEM_REGRAS],
+        embutidas=[{"nome": nome, **info} for nome, info in EMBUTIDAS.items()],
+    ), 200
+
+
 @app.route("/analisar", methods=["POST"])
 def analisar():
     codigo, erro = validar_codigo(request.get_json(silent=True))
@@ -126,7 +168,7 @@ def analisar():
         return erro
 
     try:
-        lexico, sintatico = analisar_completo(codigo)
+        lexico, sintatico, semantico = analisar_tudo(codigo)
     except Exception:
         # Nunca expõe detalhes internos (stack trace) ao usuário.
         app.logger.exception("Falha inesperada na análise")
@@ -148,7 +190,7 @@ def analisar():
 
     # Os campos de nível superior são os da Etapa 3 (análise léxica) e foram
     # mantidos para compatibilidade. Os blocos "lexico" e "sintatico" são o
-    # contrato da Etapa 4.
+    # contrato da Etapa 4, e "semantico", o da Etapa 5.
     return jsonify(
         sucesso=total_erros == 0,
         recebido=True,
@@ -164,6 +206,7 @@ def analisar():
             "erros": lexico["erros"],
         },
         sintatico=sintatico,
+        semantico=semantico,
     ), 200
 
 
