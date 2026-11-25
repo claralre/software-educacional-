@@ -33,7 +33,11 @@
         if (tipo === "no") {
             return { tipo: "no", id: Number(botao.dataset.iaId) };
         }
-        return { tipo: tipo, indice: Number(botao.dataset.iaIndice) };
+        const alvo = { tipo: tipo, indice: Number(botao.dataset.iaIndice) };
+        if (botao.dataset.iaLista) {
+            alvo.lista = botao.dataset.iaLista;
+        }
+        return alvo;
     }
 
     const api = {
@@ -55,6 +59,8 @@
         no: "Explicação do nó da AST",
         erro_sintatico: "Entendendo o erro sintático",
         erro_lexico: "Entendendo o erro léxico",
+        erro_semantico: "Entendendo o diagnóstico semântico",
+        simbolo: "Explicação do símbolo",
         conceito: "Professor virtual"
     };
 
