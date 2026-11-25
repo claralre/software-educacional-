@@ -74,6 +74,31 @@ class TestMontagemDoContexto(unittest.TestCase):
         self.assertIn("38 nós", ia.GLOSSARIO)
         self.assertIn("6 nós", ia.GLOSSARIO)
 
+    def test_erro_semantico(self):
+        texto = contexto({"tipo": "erro_semantico", "indice": 0},
+                         codigo="total = 1\nprint(totl)")["texto"]
+        self.assertIn("regra violada: IDENTIFICADOR_NAO_DEFINIDO", texto)
+        self.assertIn("NameError", texto)
+        self.assertIn("Você quis dizer 'total'?", texto)
+
+    def test_aviso_semantico(self):
+        texto = contexto({"tipo": "erro_semantico", "indice": 0, "lista": "avisos"},
+                         codigo="x = 1\nx = 'a'")["texto"]
+        self.assertIn("Aviso semântico", texto)
+        self.assertIn("MUDANCA_DE_TIPO", texto)
+
+    def test_simbolo(self):
+        texto = contexto({"tipo": "simbolo", "indice": 0}, codigo="def f(a):\n    return a\nf(1)")["texto"]
+        self.assertIn("- nome: f", texto)
+        self.assertIn("- parâmetros: a", texto)
+        self.assertIn("Escopos do programa: Escopo global, Função f", texto)
+
+    def test_semantica_exige_codigo_sem_erros_sintaticos(self):
+        with self.assertRaises(ia.PedidoInvalido):
+            contexto({"tipo": "erro_semantico", "indice": 0}, codigo="x = 5 +")
+        with self.assertRaises(ia.PedidoInvalido):
+            contexto({"tipo": "simbolo", "indice": 5}, codigo="x = 1")
+
     def test_pergunta_padrao(self):
         self.assertIn("nó da AST", contexto({"tipo": "no", "id": 0})["pergunta"])
 
@@ -155,3 +180,4 @@ class TestComunicacaoComOllama(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
