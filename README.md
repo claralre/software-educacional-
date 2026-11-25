@@ -9,9 +9,10 @@ O desenvolvimento é incremental:
 - **Etapa 1** — configuração do ambiente, estrutura da aplicação e comunicação entre frontend e backend;
 - **Etapa 2** — interface web para entrada de código, seleção de exemplos, envio ao backend e mensagens de retorno;
 - **Etapa 3** — **análise léxica (scanner)**: o código é transformado em uma sequência de tokens, exibidos de forma didática, com erros léxicos explicados;
-- **Etapa 4 (atual)** — **análise sintática (parser)**: os tokens são verificados contra uma gramática formal (EBNF), o programa é representado como uma **Árvore Sintática Abstrata (AST)** e os erros sintáticos são explicados com a regra gramatical violada. Como diferencial opcional, um **assistente de IA** (Ollama + Llama 3.2) explica tokens, nós e erros.
+- **Etapa 4** — **análise sintática (parser)**: os tokens são verificados contra uma gramática formal (EBNF), o programa é representado como uma **Árvore Sintática Abstrata (AST)** e os erros sintáticos são explicados com a regra gramatical violada. Como diferencial opcional, um **assistente de IA** (Ollama + Llama 3.2) explica tokens, nós e erros;
+- **Etapa 5 (atual)** — **análise semântica**: a AST é percorrida para montar a **tabela de símbolos** (nomes, tipos inferidos, escopos, definição e usos) e verificar se o programa **faz sentido** — por exemplo, se cada nome recebeu valor antes de ser usado e se os tipos combinam nas operações. Cada erro semântico explica a regra violada, sugere uma correção e informa o erro que o Python mostraria ao executar.
 
-**A análise semântica (Etapa 5) ainda não foi implementada.** O sistema verifica a forma do programa, mas não o seu significado: `print(y)` é aceito mesmo que `y` nunca tenha recebido um valor.
+As três análises aparecem lado a lado na interface, e os erros léxicos, sintáticos e semânticos são claramente diferenciados.
 
 ## 2. Linguagem escolhida
 
@@ -65,6 +66,18 @@ termo      = unario { ( "*" | "/" | "//" | "%" ) unario } ;
 
 **AST:** formato JSON uniforme. Cada nó tem `tipo`, `categoria`, `regra`, `papel`, `atributos`, posição inicial e final e `filhos`. Os tipos de nó e exemplos estão em **[`docs/AST.md`](docs/AST.md)**, que também explica a diferença entre sequência de tokens, árvore de derivação e AST.
 
+## 4.1. Análise semântica (Etapa 5)
+
+Documentação completa: **[`docs/SEMANTICA.md`](docs/SEMANTICA.md)** (escopo, regras implementadas e não implementadas, estratégia, tabela de símbolos, contrato, novidade e limitações). Resumo:
+
+- **Adaptação ao Python.** Python não tem declarações nem tipos declarados. A regra “declarar antes de usar” vira “**dar valor antes de usar**” (`NameError`), e o tipo de cada variável é **inferido** dos valores (`21` é `int`, `"Ana"` é `str`). Blocos de `if`, `while` e `for` **não** criam escopo; só funções criam.
+- **Estratégia:** percurso da AST (*tree walk*) em duas fases por escopo: (1) pré-coleta dos nomes que recebem valor e das assinaturas das funções, como o Python faz para decidir o que é variável local; (2) percurso em ordem do texto, verificando cada uso, inferindo tipos e preenchendo a tabela.
+- **Regras (erros):** nome sem valor, atribuição composta sem valor (`x += 1`), variável local lida antes de receber valor (`UnboundLocalError`), tipos incompatíveis (`"a" + 1`), sinal em não número, comparação de ordem entre tipos diferentes, `for`/`in` sobre não coleção, indexação inválida, alterar letra de texto, chamar algo que não é função, número de argumentos, argumento inválido de `len`/`range`, parâmetro repetido, `return` fora de função e `break`/`continue` fora de laço.
+- **Avisos** (permitidos, mas arriscados): variável que talvez não tenha valor (só recebe dentro de um `if` ou laço), mudança de tipo e reaproveitamento do nome de uma função embutida.
+- **Tabela de símbolos:** organizada por escopo (global, um por função, embutido), com nome, categoria, tipo, escopo, linha e coluna da definição, usos, parâmetros, tipo de retorno e sombreamento.
+- **Erros léxicos ou sintáticos:** a análise semântica **não é executada** (não há AST válida), e a interface avisa o motivo.
+- **Sem erros em cascata:** cada nome indefinido é apontado uma vez, e valores de tipo desconhecido não geram erros de tipo adicionais.
+
 ## 5. O scanner
 
 O scanner ([`backend/scanner.py`](backend/scanner.py)) foi **escrito à mão em Python**, sem geradores de analisadores e sem o módulo `tokenize` da biblioteca padrão. Ele percorre o código caractere a caractere; o caractere atual decide qual reconhecedor é usado (identificador, número, string, operador, delimitador, comentário), aplicando a regra do **casamento mais longo** (`**=` é um único token).
@@ -80,7 +93,7 @@ Justificativa da escolha:
 
 - **Frontend:** HTML, CSS e JavaScript (sem frameworks);
 - **Backend:** Python com Flask;
-- **Scanner e parser:** Python (biblioteca padrão), escritos à mão;
+- **Scanner, parser e analisador semântico:** Python (biblioteca padrão), escritos à mão;
 - **Assistente de IA (opcional):** Ollama com o modelo Llama 3.2;
 - **Servidor web:** Nginx;
 - **Conteinerização:** Docker;
@@ -99,6 +112,7 @@ software-educacional/
 │   ├── style.css           # estilos (inclui layout para celular)
 │   ├── app.js              # interface e visualizações da análise léxica
 │   ├── arvore.js           # visualizações da análise sintática (AST, derivação...)
+│   ├── semantica.js        # tabela de símbolos e diagnósticos semânticos
 │   ├── ia.js               # botões "Explicar com IA" e professor virtual
 │   ├── nginx.conf
 │   ├── Dockerfile
@@ -107,12 +121,14 @@ software-educacional/
 │   ├── app.py              # API Flask
 │   ├── scanner.py          # analisador léxico
 │   ├── analisador_sintatico.py  # parser descendente recursivo e AST
+│   ├── analisador_semantico.py  # análise semântica e tabela de símbolos
 │   ├── ia.py               # integração opcional com o Ollama
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   ├── test_app.py         # testes dos endpoints
 │   ├── test_scanner.py     # testes unitários do scanner
 │   ├── test_parser.py      # testes unitários do parser
+│   ├── test_semantico.py   # testes do analisador semântico
 │   └── test_ia.py          # testes da integração com a IA (Ollama simulado)
 ├── tests/
 │   └── test_interface.py   # testes de interação (Playwright)
@@ -122,10 +138,11 @@ software-educacional/
 │   ├── ESCOPO_LEXICO.md    # especificação léxica e funcionamento do scanner
 │   ├── GRAMATICA.md        # gramática EBNF e funcionamento do parser
 │   ├── AST.md              # formato da AST, derivação e erros sintáticos
+│   ├── SEMANTICA.md        # análise semântica e tabela de símbolos
 │   ├── IA_OLLAMA.md        # assistente de IA (Ollama + Llama 3.2)
 │   ├── ARTIGO_MATERIAIS_E_METODOS.md  # fluxograma e registros para o artigo
 │   ├── TUTORIAL.md         # tutorial para estudantes
-│   └── RELATORIO_TESTES.md # registro dos testes (Etapas 2, 3 e 4)
+│   └── RELATORIO_TESTES.md # registro dos testes (Etapas 2 a 5)
 ├── compose.yaml
 └── README.md
 ```
@@ -166,6 +183,16 @@ software-educacional/
 - **Erros sintáticos** com rótulo próprio (distinto dos erros léxicos), mensagem, encontrado, esperado, regra gramatical e dica; clicar no erro o destaca no código;
 - **Três exemplos novos**: precedência de operadores, programa completo e erros sintáticos;
 - **Assistente de IA (opcional)**: *Explicar token com IA*, *Explicar este nó com IA*, *Entender erro com IA* e **professor virtual** para perguntas livres. Veja a seção 11.1.
+
+### Etapa 5 (novas)
+
+- **Analisador semântico** integrado ao endpoint `/analisar`, executado depois do parser;
+- **Faixa das três fases** (`✔ Léxica → ✔ Sintática → ✖ Semântica`), mostrando onde a análise parou;
+- **Tabela de símbolos agrupada por escopo**; selecionar um símbolo destaca a **definição** (verde) e os **usos** (azul tracejado) no código, explica o tipo e o escopo e permite **abrir o nó na AST**;
+- **Erros semânticos** com rótulo próprio (`ERRO SEMÂNTICO`), linha e coluna, **regra violada**, **por quê**, **como corrigir** (inclusive “Você quis dizer…?”) e **o erro que o Python mostraria** ao executar; **avisos** separados (`AVISO SEMÂNTICO`, borda tracejada);
+- Aba **Regras semânticas**, com a regra do diagnóstico selecionado destacada;
+- **IA**: *Entender erro com IA* em erros e avisos semânticos e *Explicar este símbolo com IA*;
+- **Dois exemplos novos**: escopos e tabela de símbolos; erros semânticos.
 
 ## 9. Comunicação entre frontend e backend (contrato)
 
@@ -321,13 +348,59 @@ Erro léxico (`{"codigo": "x = 5 @ 2"}`): `lexico.sucesso` é `false` e o parser
 
 Os códigos HTTP continuam os da Etapa 3: um erro léxico ou sintático **não** é erro da requisição (HTTP 200); entradas inválidas recebem 400 ou 413; falhas internas, 500, sem detalhes.
 
+### Etapa 5: bloco `semantico`
+
+Os campos das Etapas 3 e 4 continuam iguais. A Etapa 5 acrescenta o bloco `semantico`. Exemplo para `x = 10`, `total = x + 5`, `print(totl)`:
+
+```json
+"semantico": {
+  "executado": true,
+  "sucesso": false,
+  "mensagem": "Análise semântica concluída com 1 erro(s) semântico(s).",
+  "tabela_simbolos": [
+    { "nome": "x", "categoria": "variavel", "tipo": "int", "tipos": ["int"], "escopo": "global",
+      "escopo_rotulo": "Escopo global", "linha": 1, "coluna": 1, "linha_fim": 1, "coluna_fim": 1,
+      "no_id": 0, "inicializado": true, "usado": true,
+      "usos": [{ "linha": 2, "coluna": 9, "linha_fim": 2, "coluna_fim": 9, "no_id": 4 }], "atribuicoes": 1 },
+    "..."
+  ],
+  "escopos": [{ "nome": "global", "rotulo": "Escopo global", "tipo": "global", "pai": null, "...": "..." }, "..."],
+  "erros": [
+    {
+      "tipo": "ERRO_SEMANTICO",
+      "regra": "IDENTIFICADOR_NAO_DEFINIDO",
+      "titulo": "Nome usado sem ter recebido valor",
+      "linha": 3, "coluna": 7, "linha_fim": 3, "coluna_fim": 10,
+      "mensagem": "Erro semântico na linha 3, coluna 7: 'totl' foi usado, mas não recebe valor em nenhum ponto do programa.",
+      "explicacao": "Em Python, uma variável só passa a existir quando recebe um valor (...)",
+      "sugestao": "Você quis dizer 'total'?",
+      "erro_python": "NameError",
+      "no_id": 9
+    }
+  ],
+  "avisos": [],
+  "resumo": { "total_simbolos": 3, "total_erros": 1, "total_avisos": 0,
+              "por_categoria": { "variavel": 2, "funcao": 0, "parametro": 0, "embutida": 1 } }
+}
+```
+
+| Campo de `semantico` | Descrição |
+|----------------------|-----------|
+| `executado` | `false` quando há erros léxicos ou sintáticos (sem AST válida, a análise semântica não roda) |
+| `sucesso` | `true` se não há erros semânticos (avisos não reprovam) |
+| `tabela_simbolos` | símbolos com nome, categoria, tipo inferido, escopo, posição da definição, usos e, para funções, parâmetros e retorno |
+| `escopos` | escopos na ordem: global, um por função, embutido |
+| `erros`, `avisos` | diagnósticos com regra, explicação, sugestão, erro do Python e id do nó da AST |
+| `resumo` | totais e contagem por categoria |
+
 ### Outros endpoints
 
 | Rota | Descrição |
 |------|-----------|
 | `GET /api/gramatica` | regras da gramática (EBNF), símbolo inicial e tipos de nó da AST |
+| `GET /api/semantica` | regras semânticas (código, título, gravidade, explicação, erro do Python) e funções embutidas reconhecidas |
 | `GET /api/ia/status` | situação do assistente de IA |
-| `POST /api/ia/explicar` | explicação por IA de um token, nó, erro ou pergunta (veja `docs/IA_OLLAMA.md`) |
+| `POST /api/ia/explicar` | explicação por IA de um token, nó, erro (léxico, sintático ou semântico), símbolo ou pergunta (veja `docs/IA_OLLAMA.md`) |
 
 ### Endpoint do escopo léxico
 
@@ -429,39 +502,49 @@ docker compose run --rm --build backend python -m unittest -v test_parser
 
 **Resultado obtido: 68 testes aprovados.**
 
-### 12.3. Testes dos endpoints — 30 testes
+### 12.3. Testes do analisador semântico — 65 testes
 
-7 testes da Etapa 2, 11 da Etapa 3, 8 da análise sintática e 4 da IA. Os da Etapa 4 cobrem: AST na resposta, contrato com os campos da Etapa 3 preservados, erro sintático com `ast: null`, erro léxico sem executar o parser, código grande, falha interna sem detalhes e `/gramatica`.
+Tabela de símbolos (tipos inferidos, escopos, usos, sombreamento, blocos sem escopo), **cada regra com casos válidos e inválidos**, avisos, formato e coerência dos campos, ligação com os nós da AST e com as posições dos tokens, casos de borda, programa grande e um **oráculo**: os programas de teste são executados no próprio Python, e o erro que ele lança (`NameError`, `TypeError`...) tem de ser o que o analisador previu.
+
+```bash
+docker compose run --rm --build backend python -m unittest -v test_semantico
+```
+
+**Resultado obtido: 65 testes aprovados.**
+
+### 12.4. Testes dos endpoints — 40 testes
+
+7 testes da Etapa 2, 11 da Etapa 3, 8 da análise sintática, 4 da IA e 10 da análise semântica. Os da Etapa 5 cobrem: tabela de símbolos na resposta, contrato com os campos das Etapas 3 e 4 preservados, erro semântico com tabela parcial, aviso sem reprovar, semântica não executada com erro léxico ou sintático, entrada vazia, falha interna sem detalhes, código grande e `/semantica`.
 
 ```bash
 docker compose run --rm --build backend python -m unittest -v test_app
 ```
 
-**Resultado obtido: 30 testes aprovados.**
+**Resultado obtido: 40 testes aprovados.**
 
-### 12.4. Testes da integração com a IA — 18 testes
+### 12.5. Testes da integração com a IA — 22 testes
 
-Montagem do contexto com os dados reais do compilador e comunicação com um Ollama **simulado**: resposta válida, vazia ou inválida, serviço fora do ar com nova tentativa, tempo esgotado, modelo não instalado e status.
+Montagem do contexto com os dados reais do compilador (inclusive erros semânticos, avisos e símbolos) e comunicação com um Ollama **simulado**: resposta válida, vazia ou inválida, serviço fora do ar com nova tentativa, tempo esgotado, modelo não instalado e status.
 
 ```bash
 docker compose run --rm --build backend python -m unittest -v test_ia
 ```
 
-**Resultado obtido: 18 testes aprovados.**
+**Resultado obtido: 22 testes aprovados.**
 
-### 12.5. Testes do frontend — 40 testes
+### 12.6. Testes do frontend — 51 testes
 
-22 testes das Etapas 2 e 3 e 18 novos: estrutura da análise sintática, renderização da AST (lista e diagrama) com escape de HTML, destaque do trecho de cada nó, tokens do nó, passos da construção, árvore de derivação e formatação segura das respostas da IA.
+22 testes das Etapas 2 e 3, 18 da Etapa 4 e 11 da Etapa 5: seções da análise semântica, agrupamento da tabela por escopo, destaque da definição e dos usos, escape de HTML, faixa das três fases, rótulos dos três tipos de erro e pedido à IA para avisos.
 
 ```bash
 docker run --rm -v "$PWD/frontend:/app" -w /app node:22-alpine node --test test_interface.js
 ```
 
-**Resultado obtido: 40 testes aprovados.**
+**Resultado obtido: 51 testes aprovados.**
 
-### 12.6. Testes de interação (Playwright) — 16 cenários
+### 12.7. Testes de interação (Playwright) — 21 cenários
 
-Os 8 cenários das Etapas 2 e 3 (sem alteração) e 8 novos: AST para código válido, lista com expandir/recolher e filtro, construção passo a passo, derivação, gramática e exportação JSON, erros sintáticos, erro léxico sem parser, consistência entre tabela de tokens e árvore, entrada grande e botão da IA.
+Os 16 cenários das Etapas 2 a 4 (sem alteração) e 5 novos: tabela de símbolos (escopos, sombreamento, destaque e ligação com a AST), erros e avisos semânticos, distinção dos três tipos de erro com a semântica não executada, consistência entre símbolos e tokens, e a análise semântica no celular.
 
 ```bash
 python -m pip install playwright
@@ -471,13 +554,14 @@ python tests/test_interface.py
 
 Variáveis opcionais: `URL_APLICACAO` (padrão `http://localhost:3000`) e `CAMINHO_CHROMIUM` (para usar um Chromium já instalado).
 
-**Resultado obtido: 16 cenários aprovados.**
+**Resultado obtido: 21 cenários aprovados.**
 
 O registro detalhado (comandos, resultados, falhas encontradas e correções) está em [`docs/RELATORIO_TESTES.md`](docs/RELATORIO_TESTES.md).
 
 ## 13. Limitações conhecidas
 
-- Não há análise semântica (variáveis não definidas, tipos, `return` fora de função, `break` fora de laço): isso fica para a Etapa 5.
+- A análise semântica infere tipos só de valores conhecidos: parâmetros, itens de lista e atributos têm tipo **desconhecido**, e erros de tipo com eles não são detectados. A existência de métodos e atributos (`lista.append`) não é verificada. Detalhes em `docs/SEMANTICA.md`, seção 11.
+- A verificação “a variável recebeu valor com certeza” é simples (trata `if/elif/else` e laços); em fluxos com `break` ou `return` no meio pode gerar avisos a mais ou a menos.
 - Construções fora do subconjunto (`class`, `import`, `try`, `lambda`, dicionários, fatiamento, parâmetros com valor padrão, comparações e atribuições encadeadas...) são recusadas pelo parser com mensagem explicativa.
 - Mais de cerca de 50 níveis de parênteses aninhados são recusados, para proteger a pilha de recursão do parser.
 - Acima de 3000 tokens, a construção passo a passo e a árvore de derivação não são exibidas (a AST, sim).
@@ -516,6 +600,17 @@ O registro detalhado (comandos, resultados, falhas encontradas e correções) es
 - 166 testes no backend, 40 no frontend e 16 cenários de interface;
 - Documentação: `GRAMATICA.md`, `AST.md`, `IA_OLLAMA.md`, `ARTIGO_MATERIAIS_E_METODOS.md` e relatório de testes.
 
+**Quinta etapa — Concluída**
+
+- Escopo da análise semântica definido e adaptado ao Python (sem declarações; tipos inferidos; escopo por função);
+- Analisador semântico por percurso da AST, integrado ao backend, com 16 regras de erro e 3 de aviso;
+- Tabela de símbolos por escopo, interativa, ligada ao código e à AST;
+- Diagnósticos com regra violada, explicação, sugestão de correção e o erro que o Python mostraria;
+- Distinção visual entre erro léxico, sintático e semântico, e faixa das três fases;
+- 245 testes no backend (65 da semântica, com oráculo Python), 51 no frontend e 21 cenários de interface;
+- Documentação: `SEMANTICA.md`, README, relatório de testes, registros para o artigo e tutorial.
+
 ## 15. Próximas etapas
 
-- **Etapa 5 — Análise semântica:** a AST da Etapa 4 será percorrida para montar a **tabela de símbolos** (a partir dos nós `ATRIBUICAO`, `FUNCAO`, `PARAMETRO` e `IDENTIFICADOR`) e verificar uso de variáveis não definidas, `return` fora de função, `break` fora de laço e compatibilidade de tipos. As posições guardadas em cada nó permitirão apontar o trecho exato de cada erro semântico.
+- **Etapa 6 — Representação semântica e experiência didática:** usar o `no_id` de cada símbolo e diagnóstico para anotar a AST com tipos e símbolos, desenhar a árvore de escopos e ampliar a experiência didática (por exemplo, um modo guiado pela análise semântica).
+- **Avaliação por pares** com o formulário (itens U1–U7 e D1–D7), incluindo as perguntas sobre a novidade da análise semântica (D6 e D7, em `docs/SEMANTICA.md`).
