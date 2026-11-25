@@ -276,6 +276,112 @@ class TestAnaliseSintatica(unittest.TestCase):
         self.assertIn("ADICAO", [t["tipo"] for t in dados["tipos_no"]])
 
 
+class TestAnaliseSemantica(unittest.TestCase):
+    """Testes do endpoint /analisar com o analisador semântico (Etapa 5)."""
+
+    def setUp(self):
+        self.cliente = app.test_client()
+
+    def analisar(self, codigo):
+        resposta = self.cliente.post("/analisar", json={"codigo": codigo})
+        return resposta.status_code, resposta.get_json()
+
+    def test_codigo_valido_retorna_tabela_de_simbolos(self):
+        status, dados = self.analisar("resultado = 10 + 5 * 2\nprint(resultado)")
+        self.assertEqual(status, 200)
+        semantico = dados["semantico"]
+        self.assertTrue(semantico["executado"])
+        self.assertTrue(semantico["sucesso"])
+        self.assertEqual(semantico["erros"], [])
+        nomes = [(s["nome"], s["tipo"], s["escopo"]) for s in semantico["tabela_simbolos"]]
+        self.assertEqual(nomes, [("resultado", "int", "global"), ("print", "função", "embutido")])
+        self.assertIn("nenhum erro semântico", semantico["mensagem"])
+        # Tokens e AST continuam no mesmo formato.
+        self.assertTrue(dados["sintatico"]["sucesso"])
+        self.assertEqual(dados["lexico"]["tokens"], dados["tokens"])
+
+    def test_formato_do_contrato_da_etapa_5(self):
+        _, dados = self.analisar("x = 1")
+        self.assertEqual(
+            set(dados["semantico"]),
+            {"executado", "sucesso", "mensagem", "tabela_simbolos", "escopos", "erros",
+             "avisos", "resumo"})
+        for campo in ("sucesso", "recebido", "mensagem", "tokens", "erros", "comentarios",
+                      "resumo", "lexico", "sintatico"):
+            self.assertIn(campo, dados)
+        self.assertEqual(
+            set(dados["sintatico"]),
+            {"executado", "sucesso", "mensagem", "ast", "erros", "derivacao",
+             "passos", "resumo", "detalhes_omitidos"})
+
+    def test_erro_semantico(self):
+        status, dados = self.analisar("x = 10\ntotal = x + 5\nprint(totl)")
+        self.assertEqual(status, 200)
+        self.assertTrue(dados["sintatico"]["sucesso"])
+        semantico = dados["semantico"]
+        self.assertFalse(semantico["sucesso"])
+        erro = semantico["erros"][0]
+        self.assertEqual(erro["tipo"], "ERRO_SEMANTICO")
+        self.assertEqual(erro["regra"], "IDENTIFICADOR_NAO_DEFINIDO")
+        self.assertEqual((erro["linha"], erro["coluna"]), (3, 7))
+        self.assertIn("Você quis dizer 'total'?", erro["sugestao"])
+        # A tabela parcial continua disponível.
+        self.assertIn("total", [s["nome"] for s in semantico["tabela_simbolos"]])
+        self.assertIn("1 erro(s) semântico(s)", semantico["mensagem"])
+
+    def test_aviso_nao_reprova_o_programa(self):
+        _, dados = self.analisar("x = 1\nx = 'a'")
+        self.assertTrue(dados["semantico"]["sucesso"])
+        self.assertEqual(dados["semantico"]["avisos"][0]["tipo"], "AVISO_SEMANTICO")
+        self.assertIn("1 aviso(s)", dados["semantico"]["mensagem"])
+
+    def test_erro_sintatico_nao_executa_a_semantica(self):
+        _, dados = self.analisar("x = 5 +")
+        semantico = dados["semantico"]
+        self.assertFalse(semantico["executado"])
+        self.assertEqual(semantico["tabela_simbolos"], [])
+        self.assertEqual(semantico["erros"], [])
+        self.assertIn("erros sintáticos", semantico["mensagem"])
+        self.assertEqual(len(dados["sintatico"]["erros"]), 1)
+
+    def test_erro_lexico_nao_executa_sintatica_nem_semantica(self):
+        _, dados = self.analisar("x = 5 @ 2")
+        self.assertFalse(dados["sintatico"]["executado"])
+        self.assertFalse(dados["semantico"]["executado"])
+        self.assertIn("erros léxicos", dados["semantico"]["mensagem"])
+        self.assertEqual(len(dados["lexico"]["erros"]), 1)
+
+    def test_requisicao_vazia_continua_como_na_etapa_2(self):
+        resposta = self.cliente.post("/analisar", json={"codigo": ""})
+        self.assertEqual(resposta.status_code, 400)
+        self.assertNotIn("semantico", resposta.get_json())
+
+    def test_falha_interna_da_semantica_nao_expoe_detalhes(self):
+        with mock.patch("app.analisar_semanticamente",
+                        side_effect=RuntimeError("segredo interno")):
+            app.logger.disabled = True
+            try:
+                resposta = self.cliente.post("/analisar", json={"codigo": "x = 1"})
+            finally:
+                app.logger.disabled = False
+        self.assertEqual(resposta.status_code, 500)
+        self.assertNotIn("segredo interno", resposta.get_data(as_text=True))
+
+    def test_codigo_grande(self):
+        status, dados = self.analisar("x = 1\nprint(x)\n" * 900)
+        self.assertEqual(status, 200)
+        self.assertTrue(dados["semantico"]["sucesso"])
+
+    def test_endpoint_semantica(self):
+        resposta = self.cliente.get("/semantica")
+        dados = resposta.get_json()
+        self.assertEqual(resposta.status_code, 200)
+        codigos = [r["codigo"] for r in dados["regras"]]
+        self.assertEqual(codigos[0], "IDENTIFICADOR_NAO_DEFINIDO")
+        self.assertIn("TIPOS_INCOMPATIVEIS", codigos)
+        self.assertIn("print", [e["nome"] for e in dados["embutidas"]])
+
+
 class TestEndpointsIA(unittest.TestCase):
     """O endpoint de IA usa um Ollama simulado: os testes não precisam do modelo."""
 
