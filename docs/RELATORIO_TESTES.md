@@ -411,3 +411,141 @@ tela de 375 px, sem rolagem horizontal.
 
 **Pendentes:**
 - validação em um celular físico (a versão móvel foi testada por emulação).
+
+- ---
+
+# Relatório de Testes — Quinta Etapa (Análise Semântica)
+
+Data da execução: 25/11/2026.
+
+Ambiente: contêiner Linux com Docker 29 / Docker Compose v5, Python 3.11
+(imagem do backend), Node.js 22 (`node:22-alpine`), Playwright com Chromium
+(headless).
+
+Bateria completa (regressão das Etapas 1 a 5):
+
+```bash
+sh scripts/testar_tudo.sh
+```
+
+## 1. Testes unitários do analisador semântico
+
+Arquivo: `backend/test_semantico.py`.
+
+```bash
+docker compose run --rm --build backend python -m unittest -v test_semantico
+```
+
+Resultado: **65 testes executados, 65 aprovados, 0 reprovados.**
+
+| Grupo | O que é verificado |
+|-------|--------------------|
+| Tabela de símbolos | tipo inferido de literais e expressões; formato do símbolo; usos com posição; função com parâmetros, escopo local e posição do nome; tipo de retorno inferido; embutidas no escopo `embutido`; sombreamento de global por local; blocos de `if` sem escopo próprio; variável do `for` |
+| Nome sem valor | caso válido; nome nunca definido com sugestão (“Você quis dizer…?”); uso antes da atribuição; função chamada antes do `def`; lado direito avaliado antes (`x = x + 1`); sem erro em cascata; função usando global definida depois; função chamando função definida depois; nome inexistente dentro de função; função interna lendo variável da externa |
+| Atribuição composta | válido; sem valor anterior; tipo verificado (`t = 'a'` / `t += 1`) |
+| Variável local | válido; local lida antes de receber valor (`UnboundLocalError`); `+=` em global dentro de função |
+| Tipos | combinações válidas (`str + str`, `list * int`, `'%d' % 3`, `True + 1`…); `str + int`; sete combinações inválidas; tipo desconhecido sem erro; sinal em não número; comparação de ordem; `in` inválido |
+| Coleções | válidos; `for` em número (com sugestão de `range`); indexar número; índice não inteiro; alterar letra de texto |
+| Chamadas | válidos; número errado de argumentos (função do programa e embutidas); `len(5)`, `range('a')`; chamar valor que não é função; parâmetro repetido; método não verificado |
+| Contexto | válidos; `return` fora de função; `break`/`continue` fora de laço; função dentro de laço começa sem laço |
+| Avisos | variável definida só dentro de `if`; `if/elif/else` que define com certeza (sem aviso); variável definida mais adiante no laço; mudança de tipo; reaproveitar nome de embutida |
+| Formato e consistência | campos do erro; texto de todas as regras; erros e símbolos apontam para nós existentes da AST, na mesma posição; posições iguais às dos tokens; erros ordenados; bordas (só comentário, `pass`, função vazia); resumo por categoria; programa com 1600 linhas |
+| **Oráculo Python** | 16 programas com erro são executados no próprio Python, e o erro lançado (`NameError`, `UnboundLocalError`, `TypeError`) é exatamente o previsto pelo analisador; 4 programas válidos executam sem erro; `return`/`break` fora de contexto e parâmetro repetido são rejeitados pelo compilador do Python (`SyntaxError`) |
+| Embutidas | cada função da tabela de embutidas existe no Python, com limites de argumentos coerentes |
+
+## 2. Testes dos endpoints
+
+Arquivo: `backend/test_app.py` — **40 testes, 40 aprovados** (30 das Etapas 2 a 4,
+sem alteração, + 10 novos em `TestAnaliseSemantica`):
+
+- código válido retorna a tabela de símbolos (`resultado: int`, `print: embutida`);
+- contrato da Etapa 5: bloco `semantico` com os campos documentados, campos das
+  Etapas 3 e 4 preservados;
+- erro semântico (`totl`) com linha 3, coluna 7, regra, sugestão e tabela parcial;
+- aviso não reprova o programa (`sucesso: true`);
+- erro sintático: semântica não executada, tabela vazia, mensagem explicando;
+- erro léxico: nem sintática nem semântica executadas;
+- requisição vazia continua com HTTP 400, sem bloco `semantico`;
+- falha interna da semântica: HTTP 500 sem detalhes;
+- código grande (1800 linhas) analisado;
+- `GET /semantica` lista as regras e as embutidas.
+
+## 3. Testes da integração com a IA
+
+Arquivo: `backend/test_ia.py` — **22 testes, 22 aprovados** (18 da Etapa 4 + 4
+novos): contexto para erro semântico (regra, `NameError`, sugestão), para aviso
+semântico, para símbolo (parâmetros e escopos) e recusa quando o código tem erro
+sintático ou o símbolo não existe. A resposta real do modelo para os novos alvos
+não foi registrada nesta etapa (o Ollama é opcional; ver `docs/IA_OLLAMA.md`).
+
+## 4. Testes do frontend
+
+Arquivo: `frontend/test_interface.js` — **51 testes, 51 aprovados** (40 das Etapas
+2 a 4 + 11 novos):
+- página carrega `semantica.js` depois de `arvore.js`; Dockerfile copia o arquivo;
+- seções da análise semântica e explicação dos conceitos (escopo sem blocos);
+- exemplos novos no seletor e no código;
+- rótulos de categoria e descrição do tipo (`função(a) → desconhecido`,
+  `int → str`, `int → desconhecido`);
+- tabela agrupada por escopo, na ordem; grupo de embutidas só quando usado;
+- destaque da definição e de todos os usos, preservando o texto do código;
+- escape de HTML no código marcado;
+- faixa das três fases (ok, aviso, erro, não executada);
+- rótulos e estilos distintos para erro léxico, sintático e semântico, e aviso;
+- diagnóstico com regra, porquê, correção, erro do Python e botões;
+- pedido à IA para aviso semântico com a lista correta.
+
+## 5. Testes de interação (Playwright)
+
+Arquivo: `tests/test_interface.py` — **21 cenários, 21 aprovados** (16 das Etapas
+2 a 4, sem alteração, + 5 novos):
+
+| Cenário novo | Verificações |
+|--------------|--------------|
+| `testar_tabela_de_simbolos` | exemplo “Escopos”: três fases ok; três grupos (global, função dobro, embutidas); marca de sombreamento no `total` local; selecionar o `total` global destaca 1 definição e 2 usos; “Ver o nó na AST” seleciona o nó `total` na árvore |
+| `testar_erros_semanticos` | exemplo “Erros semânticos”: 5 erros com rótulo ERRO SEMÂNTICO; posição, mensagem e `TypeError`; sugestão “Você quis dizer 'idade'?”; clicar no erro destaca `idad` e a regra; botão leva ao nó Chamada na AST; aviso de mudança de tipo separado e sem reprovar |
+| `testar_tres_tipos_de_erro_e_semantica_nao_executada` | ERRO LÉXICO com sintática e semântica não executadas; ERRO SINTÁTICO com semântica não executada e conteúdo oculto; ERRO SEMÂNTICO com análise sintática sem erros |
+| `testar_consistencia_simbolos_tokens_e_ast` | a posição do símbolo `resultado` (linha 2, coluna 1) é a mesma da tabela de tokens |
+| `testar_semantica_no_celular` | 375 px com toque: erros semânticos, seleção de símbolo, sem rolagem horizontal |
+
+## 6. Regressão
+
+| Verificação | Resultado |
+|-------------|-----------|
+| Testes do scanner (Etapa 3), sem alteração | 50 de 50 aprovados |
+| Testes do parser (Etapa 4), sem alteração | 68 de 68 aprovados |
+| `scanner.py` e `analisador_sintatico.py` | sem alteração |
+| Testes de endpoint das Etapas 2 a 4 | 30 de 30 aprovados, sem alteração |
+| Testes de frontend das Etapas 2 a 4 | 40 de 40 aprovados, sem alteração |
+| Cenários Playwright das Etapas 2 a 4 | 16 de 16 aprovados, sem alteração |
+| Todos os 12 exemplos anteriores | nenhum erro semântico (verificado pela API) |
+| Docker Compose sobe `frontend` e `backend`; `POST /api/analisar` via Nginx retorna `semantico` | Aprovado |
+
+## 7. Falhas encontradas e correções
+
+| # | Falha | Correção |
+|---|-------|----------|
+| 1 | Uma função chamada dentro de outra função, mas definida depois dela, aparecia na tabela como “não usada”: o uso era lido antes de o símbolo existir. | Usos de nomes ainda não definidos ficam pendentes e são anotados quando o símbolo é criado; teste `test_funcao_chama_funcao_definida_depois`. |
+| 2 | Chamar `f()` antes do `def f` gerava a mensagem “só recebe valor na linha 2”, estranha para uma função. | Mensagem própria: “a função 'f' foi usada, mas só é definida (def) na linha 2”. |
+| 3 | `total += 1` dentro de uma função, com `total` global, era apontado como atribuição composta sem valor, mas o Python lança `UnboundLocalError` (o nome é local). | O caso passou a gerar `VARIAVEL_LOCAL_SEM_VALOR`; conferido pelo oráculo Python. |
+| 4 | Na tabela, `total = 0` seguido de `total += dobro(i)` aparecia só como “desconhecido”, escondendo que começou como `int`. | A coluna de tipo mostra o histórico: `int → desconhecido`. |
+| 5 | Com erro sintático, o título “Avisos semânticos” aparecia sozinho, sem conteúdo. | O bloco de avisos fica oculto quando a semântica não é executada; verificado no Playwright. |
+| 6 | No ambiente de testes, o `pip install` do `docker build` falhou por causa do certificado do proxy de rede do ambiente (o mesmo problema da Etapa 3). | Problema do ambiente, não do projeto: foi usada uma imagem base local que confia no certificado. Os Dockerfiles do projeto não foram alterados. |
+
+## 8. Validação do fluxo completo
+
+1. `docker compose up -d --build`: `frontend` (3000) e `backend` (5001) em execução.
+2. Exemplo “Escopos e tabela de símbolos”: tokens, AST, tabela de símbolos com três
+   escopos, sombreamento e destaque de definição e usos.
+3. Exemplo “Erros semânticos”: 5 erros com regra, explicação, sugestão e erro do
+   Python; ligação de cada erro com o nó da AST.
+4. Exemplos “Erros léxicos” e “Erros sintáticos”: análise semântica não executada,
+   com aviso; faixa das fases mostrando onde a análise parou.
+5. Todos os testes automatizados aprovados (245 no backend, 51 no frontend, 21
+   cenários de interface).
+
+**Pendentes:**
+- resposta real do Llama 3.2 para erros semânticos e símbolos (a integração foi
+  testada com o Ollama simulado);
+- validação em um celular físico (a versão móvel foi testada por emulação);
+- avaliação por pares (planejada, com os itens D6 e D7 sobre a novidade).
