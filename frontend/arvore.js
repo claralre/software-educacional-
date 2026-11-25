@@ -295,6 +295,8 @@
     if (typeof document === "undefined") {
         return;
     }
+    // Disponível para semantica.js, carregado depois deste arquivo.
+    window.ArvoreAPI = api;
       // -- Interface ----------------------------------------------------------
 
     const painel = document.getElementById("painel-sintatico");
@@ -736,6 +738,27 @@
         mostrar(evento.detail.codigo, evento.detail.dados);
     });
     document.addEventListener("analise-limpa", esconder);
+
+    // Pedido de outro módulo (ex.: tabela de símbolos) para mostrar um nó.
+    document.addEventListener("mostrar-no-ast", function (evento) {
+        const id = evento.detail.id;
+        if (!estado || !estado.nos[id]) {
+            return;
+        }
+        abrirAba("ast");
+        const botao = arvoreAst.querySelector(".no-ast[data-id=\"" + id + "\"]");
+        if (botao) {
+            let pai = botao.parentElement;
+            while (pai && pai !== arvoreAst) {
+                if (pai.tagName === "DETAILS") {
+                    pai.open = true;
+                }
+                pai = pai.parentElement;
+            }
+        }
+        selecionarNo(id);
+        (botao || arvoreAst).scrollIntoView({ block: "center", inline: "center" });
+    });
 
     carregarGramatica();
 })();
