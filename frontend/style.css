@@ -417,9 +417,43 @@ dialog#dialogo-ia { max-width: 680px; width: calc(100% - 32px); border: none; bo
 dialog#dialogo-ia::backdrop { background: rgba(15, 23, 42, 0.5); }
 #conteudo-dialogo-ia { max-height: 60vh; overflow-y: auto; }
 
+/* Análise semântica ----------------------------------------------------- */
+
+.fases { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: 0.92rem; }
+.fases:empty { display: none; }
+.fase { border-radius: 999px; padding: 4px 10px; border: 2px solid; background: #fff; }
+.fase-ok { border-color: #15803d; color: #14532d; }
+.fase-aviso { border-color: #b45309; color: #78350f; }
+.fase-erro { border-color: #b91c1c; color: #7f1d1d; background: #fef2f2; }
+.fase-nao_executada { border-color: #94a3b8; color: #475569; border-style: dashed; }
+.seta-fase { color: #64748b; }
+
+.etiqueta-erro.semantico { background: #6d28d9; }
+.etiqueta-erro.aviso { background: #92400e; }
+.erro.erro-semantico { border-left-color: #6d28d9; background: #f5f3ff; }
+.erro.aviso-semantico { border-left-color: #b45309; border-left-style: dashed; background: #fffbeb; }
+.erro .sugestao { color: #14532d; }
+
+mark.destaque-def { background: #bbf7d0; outline: 2px solid #15803d; border-radius: 2px; color: inherit; }
+mark.destaque-uso { background: #bfdbfe; outline: 2px dashed #1d4ed8; border-radius: 2px; color: inherit; }
+mark.destaque-aviso { background: #fef3c7; outline: 2px dashed #b45309; border-radius: 2px; color: inherit; }
+
+.grupo-escopo { border: 1px solid var(--borda); border-left: 6px solid var(--primaria); border-radius: 8px; padding: 8px 12px; margin: 10px 0; background: #fff; }
+.grupo-escopo.escopo-funcao { border-left-color: #7b2cbf; margin-left: 18px; }
+.grupo-escopo.escopo-embutido { border-left-color: #64748b; border-left-style: dashed; }
+.grupo-escopo h3 { margin: 4px 0; }
+#tabela-simbolos tr[data-indice] { cursor: pointer; }
+#tabela-simbolos tr.selecionado td { background: #dcfce7; }
+#tabela-simbolos tr[data-indice]:focus { outline: 2px solid var(--primaria); }
+.marca-sombra { font-size: 0.75rem; border: 1px solid #7b2cbf; color: #7b2cbf; border-radius: 4px; padding: 0 4px; }
+.nao-usado { color: #64748b; font-style: italic; }
+.ver-no { background: #f0fdf4; color: #14532d; border: 1px solid #86efac; margin: 8px 0 0; padding: 8px 12px; font-size: 0.9rem; display: inline-block; }
+.regras-semanticas li { margin: 8px 0; line-height: 1.45; }
+
 /* Celular --------------------------------------------------------------- */
 
 @media (max-width: 640px) {
+    .grupo-escopo.escopo-funcao { margin-left: 0; }
     body { padding: 0; }
     main { padding: 16px; border-radius: 0; }
     h1 { font-size: 1.6rem; }
